@@ -2014,6 +2014,28 @@ classdef mySlxOp
             grid on; % 显示网格
         end
 
+        function hilightPeakPoint(X, Y, color, exceptValue)
+            % hilightPeakPoint 高亮显示峰值点
+            % hilightPeakPoint(X, Y)
+            % X: 时间序列
+            % Y: 信号序列
+
+            [~, locs] = findpeaks(Y);
+            meanY = mean(abs(Y));
+            if ~exist('color', 'var')
+                color = 'r';
+            end
+            if ~exist('exceptValue', 'var')
+                exceptValue = 0;
+            end
+            % 去除小于均值的点
+            locs = locs(abs(Y(locs)) > max(meanY, exceptValue));
+            hold on;
+            plot(X(locs), Y(locs), 'ro', 'MarkerSize', 10, 'LineWidth', 2, 'Color', color, 'HandleVisibility', 'off');
+            hold off;
+        end
+
+
 
         %% 通用数据处理函数
         function [fftX, fftY] = fftDataSingle(X, Y)
