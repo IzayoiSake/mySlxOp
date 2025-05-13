@@ -123,72 +123,72 @@ classdef mySlxOp
         end
 
 
-        function dataType = busBlockGetElementDataType(opts)
-        %   获取BusSelector或BusCreator中使用的元素的数据类型
-        %   dataType = busBlockGetElementDataType(opts)
-        %
-        %   输入:
-        %       block - 模型中的 block 路径或句柄或者 block 对象, 如果不指定则默认为当前选择的 block
-        %
-        %   输出:
-        %       dataType - 所有 Bus 被使用的元素的数据类型的 cell 数组
+        % function dataType = busBlockGetElementDataType(opts)
+        % %   获取BusSelector或BusCreator中使用的元素的数据类型
+        % %   dataType = busBlockGetElementDataType(opts)
+        % %
+        % %   输入:
+        % %       block - 模型中的 block 路径或句柄或者 block 对象, 如果不指定则默认为当前选择的 block
+        % %
+        % %   输出:
+        % %       dataType - 所有 Bus 被使用的元素的数据类型的 cell 数组
 
-            arguments
-                opts.block = '';
-            end
+        %     arguments
+        %         opts.block = '';
+        %     end
 
-            block = opts.block;
+        %     block = opts.block;
 
-            block = mySlxOp.checkBlock(block);
+        %     block = mySlxOp.checkBlock(block);
 
-            % 获取顶层模型
-            topModel = bdroot(block{1}.Handle);
-            topModel = getfullname(topModel);
-            % 创建仿真器
-            simModel = simulation(topModel);
-            % 查看顶层模型是否已经被其他程序(函数)运行处于仿真状态
-            isOtherSiming = true;
-            simStatus = get_param(topModel, 'SimulationStatus');
-            if strcmp(simStatus, 'stopped')
-                isOtherSiming = false;
-                warning('off', 'all');
-                step(simModel);
-                warning('on', 'all');
-            end
+        %     % 获取顶层模型
+        %     topModel = bdroot(block{1}.Handle);
+        %     topModel = getfullname(topModel);
+        %     % 创建仿真器
+        %     simModel = simulation(topModel);
+        %     % 查看顶层模型是否已经被其他程序(函数)运行处于仿真状态
+        %     isOtherSiming = true;
+        %     simStatus = get_param(topModel, 'SimulationStatus');
+        %     if strcmp(simStatus, 'stopped')
+        %         isOtherSiming = false;
+        %         warning('off', 'all');
+        %         step(simModel);
+        %         warning('on', 'all');
+        %     end
 
-            dataType = cell(0);
-            for i = 1:length(block)
-                thisBlock = block{i};
-                % 如果是 Bus Selector
-                if strcmp(thisBlock.BlockType, 'BusSelector')
-                    % 获取selectBlockObj 的编译后的数据类型
-                    thisBlockDataType = get_param(thisBlock.Handle, 'CompiledPortDataTypes');
-                    thisBlockDataType = thisBlockDataType.Outport;
-                    if ~iscell(thisBlockDataType)
-                        thisBlockDataType = cellstr(thisBlockDataType);
-                    end
-                    thisBlockDataType = thisBlockDataType(:);
-                    dataType = [dataType; thisBlockDataType];
-                end
-                % 如果是 Bus Creator
-                if strcmp(thisBlock.BlockType, 'BusCreator')
-                    % 获取selectBlockObj 的编译后的数据类型
-                    thisBlockDataType = get_param(thisBlock.Handle, 'CompiledPortDataTypes');
-                    thisBlockDataType = thisBlockDataType.Inport;
-                    if ~iscell(thisBlockDataType)
-                        thisBlockDataType = cellstr(thisBlockDataType);
-                    end
-                    thisBlockDataType = thisBlockDataType(:);
-                    dataType = [dataType; thisBlockDataType];
-                end
-            end
+        %     dataType = cell(0);
+        %     for i = 1:length(block)
+        %         thisBlock = block{i};
+        %         % 如果是 Bus Selector
+        %         if strcmp(thisBlock.BlockType, 'BusSelector')
+        %             % 获取selectBlockObj 的编译后的数据类型
+        %             thisBlockDataType = get_param(thisBlock.Handle, 'CompiledPortDataTypes');
+        %             thisBlockDataType = thisBlockDataType.Outport;
+        %             if ~iscell(thisBlockDataType)
+        %                 thisBlockDataType = cellstr(thisBlockDataType);
+        %             end
+        %             thisBlockDataType = thisBlockDataType(:);
+        %             dataType = [dataType; thisBlockDataType];
+        %         end
+        %         % 如果是 Bus Creator
+        %         if strcmp(thisBlock.BlockType, 'BusCreator')
+        %             % 获取selectBlockObj 的编译后的数据类型
+        %             thisBlockDataType = get_param(thisBlock.Handle, 'CompiledPortDataTypes');
+        %             thisBlockDataType = thisBlockDataType.Inport;
+        %             if ~iscell(thisBlockDataType)
+        %                 thisBlockDataType = cellstr(thisBlockDataType);
+        %             end
+        %             thisBlockDataType = thisBlockDataType(:);
+        %             dataType = [dataType; thisBlockDataType];
+        %         end
+        %     end
 
-            if ~isOtherSiming
-                % 关闭仿真器
-                stop(simModel);
-            end
+        %     if ~isOtherSiming
+        %         % 关闭仿真器
+        %         stop(simModel);
+        %     end
 
-        end
+        % end
 
 
         %% 创建标准参数和信号
@@ -470,6 +470,10 @@ classdef mySlxOp
 
             line = mySlxOp.checkLine(line);
 
+            if isParamAdd
+                mySlxOp.logAllLine("onlyRead", true);
+            end
+
             for i = 1:length(line)
                 thisLine = line{i};
                 % 获取源端口和目标端口
@@ -495,12 +499,7 @@ classdef mySlxOp
                 end
                 parentBlocks = unique(parentBlocks);
                 parentBlocks = mySlxOp.parseBlock(parentBlocks);
-                if isParamAdd
-                    try
-                        mySlxOp.logAllLine("onlyRead", true);
-                    catch
-                    end
-                end
+                
                 for j = 1:length(parentBlocks)
                     parentBlock = parentBlocks{j};
                     % 查看是否是一个名字以 "Ovrd" 开头的 SubSystem
@@ -1104,14 +1103,15 @@ classdef mySlxOp
             fullId = mySlxOp.getLineFullId('line', allLines);
 
             % 创建仿真器
-            simModel = simulation(topModelPath);
+            % simModel = simulation(topModelPath);
             % 查看顶层模型是否已经被其他程序(函数)运行处于仿真状态
             isOtherSiming = true;
             simStatus = get_param(topModelPath, 'SimulationStatus');
             if strcmp(simStatus, 'stopped')
                 isOtherSiming = false;
                 warning('off', 'all');
-                step(simModel);
+                set_param(topModelPath, 'SimulationCommand', 'start');
+                set_param(topModelPath, 'SimulationCommand', 'pause');
                 warning('on', 'all');
             end
 
@@ -1135,8 +1135,11 @@ classdef mySlxOp
 
             if ~isOtherSiming
                 % 关闭仿真器
-                stop(simModel);
+                set_param(topModelPath, 'SimulationCommand', 'stop');
             end
+
+            % 清除基础工作区中的变量"out"
+            evalin('base', 'clear out');
 
             allLine.dataType = lineDataType;
             allLine.fullId = fullId;
