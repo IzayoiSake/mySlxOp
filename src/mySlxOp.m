@@ -22,6 +22,14 @@ classdef mySlxOp
             block = mySlxOp.parseBlock(block);
         end
 
+        function classObject = returnSelf()
+            % returnSelf 返回 mySlxOp 类的实例
+            %
+            % Output:
+            %   classObject (mySlxOp) - mySlxOp 类的对象实例
+            classObject = mySlxOp;
+        end
+
 
         function block = parseBlock(block)
             if isempty(block)
@@ -634,6 +642,188 @@ classdef mySlxOp
         end
 
 
+        function clearedVars = clearMat()
+        % 清除基础工作区中的无用的变量
+            clearedVars = {};
+            % 读取工作区中的所有变量
+            vars = evalin('base', 'who');
+            % 获取当前模型的名称
+            modelName = bdroot(gcs);
+            if isempty(modelName)
+                disp('没有打开模型, 请先打开一个模型');
+                return;
+            end
+            function [hwParData, hwParFilePath] = readHWPar()
+                [hwParFileName, hwParFileDir] = uigetfile('*.xlsx;*.xls', '选择HW数据文件');
+                hwParFilePath = fullfile(hwParFileDir, hwParFileName);
+                % hwParFilePath = 'D:\Projects\01_CM60\03_AFE\HwPar\HwPar02_Afe\HwPar02_Afe.xlsx';
+                if isempty(hwParFilePath)
+                    return;
+                end
+                hwParData = readtable(hwParFilePath);
+            end
+            function [ctrlParData, ctrlParFilePath] = readCtrlPar()
+                [ctrlParFileName, ctrlParFileDir] = uigetfile('*.xlsx;*.xls', '选择Ctrl数据文件');
+                ctrlParFilePath = fullfile(ctrlParFileDir, ctrlParFileName);
+                % ctrlParFilePath = 'D:\Projects\01_CM60\03_AFE\CtrlPar\CtrlPar02_Afe\CtrlPar02_Afe.xlsx';
+                if isempty(ctrlParFilePath)
+                    return;
+                end
+                ctrlParData = readtable(ctrlParFilePath);
+            end
+            % % 读取CtrlPar和HWPar数据(用户选择Excel文件)
+            [ctrlParData, ctrlParFilePath] = readCtrlPar();
+            if isempty(ctrlParFilePath)
+                return;
+            end
+            [hwParData, hwParFilePath] = readHWPar();
+            if isempty(hwParFilePath)
+                return;
+            end
+
+            % 调用模型的搜索功能,查找变量是否在模型中被使用
+            modelBlocks = find_system(modelName);
+            modelSignals = find_system(modelName, 'FindAll', 'on', 'type', 'line');
+            modelSignals = num2cell(modelSignals);
+            % 遍历modelBlocks, 获取每个block的全部参数名
+            blockParamNames = cell(length(modelBlocks), 1);
+            blockParamContents = cell(length(modelBlocks), 1);
+            for i = 1:length(modelBlocks)
+                block = modelBlocks{i};
+                blockParams = get_param(block, 'ObjectParameters');
+                tempBlockParamNames = fieldnames(blockParams);
+                tempBlockParamContents = cell(length(tempBlockParamNames), 1);
+                indexTemp = zeros(length(tempBlockParamNames), 1);
+                for j = 1:length(tempBlockParamNames)
+                    try
+                        thisParam = get_param(block, tempBlockParamNames{j});
+                        tempBlockParamContents{j, 1} = thisParam;
+                        % 检测thisParam是否为字符串
+                        if ischar(thisParam)
+                            indexTemp(j) = 1;
+                        end
+                    catch
+                    end
+                end
+                blockParamNames{i} = tempBlockParamNames(indexTemp == 1);
+                blockParamContents{i} = tempBlockParamContents(indexTemp == 1);
+            end
+            % 遍历modelSignals, 获取每个signal的全部参数名
+            signalParamNames = cell(length(modelSignals), 1);
+            signalParamContents = cell(length(modelSignals), 1);
+            for i = 1:length(modelSignals)
+                signal = modelSignals{i};
+                signalParams = get_param(signal, 'ObjectParameters');
+                tempSignalParamNames = fieldnames(signalParams);
+                tempSignalParamContents = cell(length(tempSignalParamNames), 1);
+                indexTemp = zeros(length(tempSignalParamNames), 1);
+                for j = 1:length(tempSignalParamNames)
+                    try
+                        thisParam = get_param(signal, tempSignalParamNames{j});
+                        tempSignalParamContents{j, 1} = thisParam;
+                        % 检测thisParam是否为字符串
+                        if ischar(thisParam)
+                            indexTemp(j) = 1;
+                        end
+                    catch
+                    end
+                end
+                signalParamNames{i} = tempSignalParamNames(indexTemp == 1);
+                signalParamContents{i} = tempSignalParamContents(indexTemp == 1);
+            end
+
+            disp('初始化完成, 开始清除变量...');
+
+            
+            % 遍历工作区中的变量
+            for i = 1:length(vars)
+                varName = vars{i};
+                isClear = true;
+                % 从基础工作区中获取变量内容
+                varContent = evalin('base', varName);
+                % 如果变量的数据类型不是Simulink.Signal, Simulink.Bus或Simulink.Parameter,则不清除
+                if ~isa(varContent, 'Simulink.Signal') && ~isa(varContent, 'Simulink.Bus') && ~isa(varContent, 'Simulink.Parameter')
+                    disp(['变量 ' varName ' 的数据类型不是Simulink.Signal, Simulink.Bus或Simulink.Parameter, 不清除']);
+                    continue;
+                end
+                % 如果变量名在模型中被使用,则不清除
+                for j = 1:length(modelBlocks)
+                    if ~isClear
+                        break;
+                    end
+                    for k = 1:length(blockParamNames{j})
+                        try
+                            tempContent = blockParamContents{j}{k};
+                            % 检测tempContent是否为字符串
+                            if ~ischar(tempContent)
+                                continue;
+                            end
+                            if contains(tempContent, varName)
+                                isClear = false;
+                                break;
+                            end
+                        catch errorMsg
+                            keyboard;
+                        end
+                    end
+                end
+                for j = 1:length(modelSignals)
+                    if ~isClear
+                        break;
+                    end
+                    for k = 1:length(signalParamNames{j})
+                        tempContent = signalParamContents{j}{k};
+                        % 检测tempContent是否为字符串
+                        if ~ischar(tempContent)
+                            continue;
+                        end
+                        if contains(tempContent, varName)
+                            isClear = false;
+                            break;
+                        end
+                    end
+                end
+                % 如果变量名在CtrlPar或HWPar中被使用,则不清除
+                for j = 1:length(ctrlParData.param)
+                    if ~isClear
+                        break;
+                    end
+                    if contains(ctrlParData.param{j}, varName)
+                        isClear = false;
+                        break;
+                    end
+                end
+                for j = 1:length(hwParData.param)
+                    if ~isClear
+                        break;
+                    end
+                    if contains(hwParData.param{j}, varName)
+                        isClear = false;
+                        break;
+                    end
+                end
+                
+                if isClear
+                    % 断点暂停执行
+                    % keyboard;
+                    disp(['是否清除变量: ' varName]);
+                    % % 等待用户输入
+                    % keyboard;
+                    % userChoice = input('Y/N [N]: ', 's');
+                    % if isempty(userChoice)
+                    %     userChoice = 'N';
+                    % end
+                    % if strcmpi(userChoice, 'Y')
+                    %     % 清除变量
+                    %     evalin('base', ['clear ' varName]);
+                    % end
+                    evalin('base', ['clear ' varName]);
+                    clearedVars{end+1} = varName;
+                end
+            end
+        end
+
+
         %% 跟踪信号流的相关功能
         function [srcBlock, srcPortNum] = getLastBlock(opts)
             
@@ -876,7 +1066,7 @@ classdef mySlxOp
 
         %% 信号线的相关功能
         function transLineName(opts)
-            
+        % 将一个block的输入信号线的名字转换为输出信号线的名字, 或者反之
             arguments
                 opts.block = '';
                 opts.direction = 'in';
@@ -974,15 +1164,34 @@ classdef mySlxOp
         end
 
 
-        function createSelectedSig()
+        function createSelectedSig(opts)
+        % 创建选中的信号线的标准信号
+            arguments
+                opts.checkDataType = true;
+            end
+            checkDataType = opts.checkDataType;
 
             line = mySlxOp.checkLine();
 
-            for i = 1:length(line)
-                thisLine = line{i};
-                sigName = get_param(thisLine.Handle, 'Name');
-                mySlxOp.createStdSig(sigName);
-                thisLine.MustResolveToSignalObject = true;
+            if isempty(line)
+                return;
+            end
+
+            if checkDataType
+                lineDataType = mySlxOp.getLineDataType('line', line);
+                for i = 1:length(line)
+                    thisLine = line{i};
+                    sigName = get_param(thisLine.Handle, 'Name');
+                    mySlxOp.createStdSig(sigName, lineDataType{i});
+                    thisLine.MustResolveToSignalObject = true;
+                end
+            else
+                for i = 1:length(line)
+                    thisLine = line{i};
+                    sigName = get_param(thisLine.Handle, 'Name');
+                    mySlxOp.createStdSig(sigName);
+                    thisLine.MustResolveToSignalObject = true;
+                end
             end
         end
 
@@ -1190,16 +1399,52 @@ classdef mySlxOp
             allLine = mySlxOp.logAllLine('onlyRead', true);
             lineFullId = mySlxOp.getLineFullId('line', line);
 
+            % 检查allLine是否包含全部的lineFullId
+            isOk = mySlxOp.checkAllLineLog('line', line);
+            if ~isOk
+                allLine = mySlxOp.logAllLine('onlyRead', false);
+            end
+            isOk = mySlxOp.checkAllLineLog('line', line);
+            if ~isOk
+                error(append("Error [getLineDataType]: """, thisLineFullId, """ not found in allLine."));
+            end
+
             lineDataType = cell(length(line), 1);
 
             for i = 1:length(line)
                 thisLine = line{i};
                 thisLineFullId = lineFullId{i};
                 index = find(contains(allLine.fullId, thisLineFullId));
-                if ~isempty(index)
-                    lineDataType{i} = allLine.dataType{index};
-                else
-                    lineDataType{i} = 'Error';
+                lineDataType{i} = allLine.dataType{index};
+            end
+        end
+
+
+        % 检测allLineLog是否包含所需的line
+        function isOk = checkAllLineLog(opts)
+
+            arguments
+                opts.line = '';
+            end
+
+            line = opts.line;
+
+            line = mySlxOp.checkLine(line);
+
+            if isempty(line)
+                return;
+            end
+
+            allLine = mySlxOp.logAllLine('onlyRead', true);
+            lineFullId = mySlxOp.getLineFullId('line', line);
+
+            isOk = true;
+            for i = 1:length(line)
+                thisLine = line{i};
+                thisLineFullId = lineFullId{i};
+                if ~any(contains(allLine.fullId, thisLineFullId))
+                    isOk = false;
+                    break;
                 end
             end
         end
@@ -1334,6 +1579,22 @@ classdef mySlxOp
 
                         evalFunc = append("[", string(selectedData{j}), "]");
 
+                        % 同步数据维度
+                        if (isprop(workSpaceVar, 'Breakpoints') && isBreakPoints)
+                            dim = size(workSpaceVar.Breakpoints.Value);
+                        elseif isprop(workSpaceVar, 'Table')
+                            dim = size(workSpaceVar.Table.Value);
+                        elseif isprop(workSpaceVar, 'Value') || isfield(workSpaceVar, 'Value')
+                            dim = size(workSpaceVar.Value);
+                        elseif isnumeric(workSpaceVar)
+                            dim = size(workSpaceVar);
+                        end
+                        if (length(dim) >= 2)
+                            % 如果维度大于2, 则将evalFunc转换为多维数组
+                            evalFunc = append("reshape(", evalFunc, ", ", "[", num2str(dim), "]", ")");
+                        end
+
+                        % 同步数据类型
                         if (isprop(workSpaceVar, 'Breakpoints') && isBreakPoints)
                             dataType = workSpaceVar.Breakpoints.DataType;
                         elseif isprop(workSpaceVar, 'Table')
@@ -1345,6 +1606,7 @@ classdef mySlxOp
                         end
                         evalFunc = append(dataType, "(", evalFunc, ")");
 
+                        % 赋值
                         if (isprop(workSpaceVar, 'Breakpoints') && isBreakPoints)
                             workSpaceVar.Breakpoints.Value = eval(evalFunc);
                         elseif isprop(workSpaceVar, 'Table')
@@ -1610,13 +1872,70 @@ classdef mySlxOp
                     % 如果包含，则返回该变量的数据
                     varData.name = varName;
                     varData.data = mdfData{i}.(varName);
-                    varData.time = mdfData{i}.time;
+                    timeAxisName = mdfData{i}.Properties.DimensionNames{1};
+                    varData.time = mdfData{i}.(timeAxisName);
                     varData.time = seconds(varData.time);
                     return;
                 end
             end
         end
 
+        
+        function out = rtgDataGet(varName, filePath)
+            if ~exist('varName', 'var') || isempty(varName)
+                varName = "DataTrace1-TraceData";
+            end
+
+            if isfile(filePath)
+                % 以Text模式读取数据
+                textData = fileread(filePath);
+
+                % 以换行符分割文本数据
+                textList = splitlines(textData);
+                textList = textList(:);
+
+                % 找到全部 以 "varName[*]" 开头的行
+                varLines = startsWith(textList, append(varName, "["));
+                if ~any(varLines)
+                    error("未找到变量: %s", varName);
+                end
+                varLines = varLines(:);
+                varTextList = textList(varLines);
+                varTextList = varTextList(:);
+
+                % 使用正则表达式提取[]中的内容
+                varNum = regexp(varTextList, '\[(.*?)\]', 'tokens');
+                for i = 1:length(varNum)
+                    tempStr(i) = string(varNum{i}{1});
+                end
+                tempStr = tempStr(:);
+                varNum = tempStr;
+                % 将提取的内容转换为数字
+                varNum = str2double(varNum);
+                % 从小到大排序
+                [varNum, sortIndex] = sort(varNum);
+                varTextList = varTextList(sortIndex);
+
+                data = [];
+                for i = 1:length(varTextList)
+                    % 以 ','分割
+                    tempData = split(varTextList(i), ',');
+                    tempData = tempData(2:end);
+                    % 将字符串转换为数字
+                    tempData = str2double(tempData);
+                    tempData = tempData(:);
+                    data = [data; tempData];
+                end
+                time = 10e-3 * (0:length(data)-1);
+                time = time(:);
+
+                out.data = data;
+                out.time = time;
+                out.varName = varName;
+            else
+                error("文件不存在: %s", filePath);
+            end
+        end
 
 
         %% 信号层次结构的相关功能
@@ -1994,6 +2313,63 @@ classdef mySlxOp
         end
 
 
+
+
+
+        %% block 属性相关功能
+
+        function blockPropReplace(opts)
+        % blockPropReplace 替换选中模块的属性中的文本
+        % 
+        % 小心使用, 可能会替换掉意料之外的文本, 注意输出信息
+        % 
+        % blockPropReplace(opts)
+            % opts: 结构体, 包含以下字段:
+            %   block: 模块路径, 默认为当前选中的模块
+            %   searchText: 搜索文本, 默认为空
+            %   replaceText: 替换文本, 默认为空
+
+            arguments
+                opts.block = '';
+                opts.searchText = '';
+                opts.replaceText = '';
+            end
+            
+            % 获取选中的模块
+            blocks = mySlxOp.checkBlock();
+            if isempty(blocks)
+                return;
+            end
+            searchText = opts.searchText;
+            replaceText = opts.replaceText;
+            if isempty(searchText)
+                disp('请提供搜索文本');
+                return;
+            end
+            % 从选中的模块中搜寻包含搜寻文本的属性
+            for i = 1:length(blocks)
+                block = blocks{i};
+                % 获取模块的属性
+                propertiesName = fieldnames(block);
+                % 遍历属性，查找包含搜寻文本的属性
+                try
+                    for j = 1:length(propertiesName)
+                        property = block.(propertiesName{j});
+                        if ischar(property) && contains(property, searchText)
+                            % 替换文本
+                            orText = block.(propertiesName{j});
+                            newText = strrep(property, searchText, replaceText);
+                            block.(propertiesName{j}) = newText;
+                            disp(append("替换模块:", """", block.Name, """", "的属性", """", propertiesName{j}, """", "From:", """", orText, """", "->", """", newText, """"));
+                        end
+                    end
+                catch
+                end
+            end
+        end
+
+
+
         %% 画图专用函数
         function betterFig()
             % 设置图形属性
@@ -2012,9 +2388,12 @@ classdef mySlxOp
             % 设置标题字体大小
             set(get(gca, 'Title'), 'FontSize', 24);
             % 设置图例字体大小
-            set(get(gca, 'Legend'), 'FontSize', 18);
+            set(get(gca, 'Legend'), 'FontSize', 16);
             box on; % 显示边框
             grid on; % 显示网格
+            
+            % 窗口最大化
+            % set(gcf, 'WindowState', 'maximized');
         end
 
         function hilightPeakPoint(X, Y, color, exceptValue)
@@ -2034,7 +2413,12 @@ classdef mySlxOp
             % 去除小于均值的点
             locs = locs(abs(Y(locs)) > max(meanY, exceptValue));
             hold on;
+            % 高亮显示峰值点
             plot(X(locs), Y(locs), 'ro', 'MarkerSize', 10, 'LineWidth', 2, 'Color', color, 'HandleVisibility', 'off');
+            % 显示峰值点的值(X和Y)
+            for i = 1:length(locs)
+                text(X(locs(i)), Y(locs(i)), num2str(Y(locs(i))), 'Color', color, 'FontSize', 12, 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'left');
+            end
             hold off;
         end
 
@@ -2042,34 +2426,110 @@ classdef mySlxOp
 
         %% 通用数据处理函数
         function [fftX, fftY] = fftDataSingle(X, Y)
-            % fftDataSingle 对数据进行FFT处理, 单边谱
-            % [fftX, fftY] = fftData(X, Y)
-            % X: 时间序列
-            % Y: 信号序列
-            % fftX: 频率序列
-            % fftY: FFT后的信号序列
+            % fftDataSingle 对数据进行单边幅值谱FFT处理
+            % X: 时间向量（必须均匀采样）
+            % Y: 信号向量（实数）
+            % fftX: 单边频率轴
+            % fftY: 单边幅值谱
 
-            % 计算采样周期和采样频率
-            sampleTime = mean(diff(X));
-            sampleRate = 1 / sampleTime;
+            X = X(:);  % 保证是列向量
+            Y = Y(:);
 
-            % 采样点数
-            N = length(Y);
+            % 采样率
+            dt = mean(diff(X));         % 采样间隔
+            Fs = 1 / dt;                % 采样频率
+            N = length(Y);              % 样本数
 
-            % 执行 FFT
+            % FFT计算
             Y_fft = fft(Y);
+            P2 = abs(Y_fft / N);        % 双边谱归一化
+            P1 = P2(1:floor(N/2)+1);    % 单边谱
+            P1(2:end-1) = 2 * P1(2:end-1);  % 除DC和Nyquist外乘2
 
-            % 构建频率轴（单边）
-            fftX = sampleRate * (0:floor(N/2)) / N;
+            % 频率轴
+            f = Fs * (0:floor(N/2)) / N;
 
-            % 计算单边幅值谱
-            P2 = abs(Y_fft / N);      % 双边谱
-            fftY = P2(1:floor(N/2)+1);% 单边谱
-            fftY(2:end-1) = 2 * fftY(2:end-1); % 除直流和Nyquist频率外，其他乘以2
+            % 输出
+            fftX = f;
+            fftY = P1;
+        end
+
+
+        function [fftX, fftY] = fftDataDouble(X, Y)
+            % fftDataDouble 对数据进行FFT处理，返回双边幅值谱
+            % X: 时间向量（必须均匀采样）
+            % Y: 信号向量
+            % fftX: 双边频率轴（包含正频率和负频率）
+            % fftY: 双边幅值谱（对称）
+
+            X = X(:);  % 强制列向量
+            Y = Y(:);
+
+            % 基本参数
+            dt = mean(diff(X));   % 采样时间间隔
+            Fs = 1 / dt;          % 采样频率
+            N = length(Y);        % 采样点数
+
+            % FFT
+            Y_fft = fft(Y);
+            fftY = abs(Y_fft / N);  % 归一化幅值谱（双边）
+
+            % 构造双边频率轴
+            if mod(N, 2) == 0
+                % 偶数点数：频率从 -Fs/2 到 Fs/2
+                f = (-N/2:N/2-1) * Fs / N;
+            else
+                % 奇数点数
+                f = (-(N-1)/2:(N-1)/2) * Fs / N;
+            end
+
+            % 将谱移位，使0频率居中
+            fftY = fftshift(fftY);
+            fftX = f;
         end
 
 
 
+        function [isOk, A, B] = debounceCal(X, Y, slopThrs)
+            % debounceCal 消抖计算
+            % X: 时间向量
+            % Y: 信号向量
+            % threshold: 阈值
+
+            X = X(:);  % 强制列向量
+            Y = Y(:);
+
+            if ~exist('slopThrs', 'var')
+                slopThrs = 1;
+            end
+
+            % 使用 y = Ax + B 的线性拟合
+            % 计算线性拟合的斜率和截距
+            coeffs = polyfit(X, Y, 1);
+            A = coeffs(1);  % 斜率
+            B = coeffs(2);  % 截距
+            % 当斜率小于 slopThrs 时，认为是消抖
+            if abs(A) < slopThrs
+                isOk = true;
+            else
+                isOk = false;
+            end
+        end
+    
+
+    %% 路径处理函数
+        function path = getZinSightPath()
+            % getZinSightPath 获取ZinSight文件夹的路径
+            % 获取当前文件的路径
+            currentPath = mfilename('fullpath');
+            % 当前文件是ZinSight文件夹下的子文件(多层文件夹下)
+            index = strfind(currentPath, '502_Matlab');
+            if isempty(index)
+                error('当前文件不在ZinSight文件夹下');
+            end
+            % 获取ZinSight文件夹的路径
+            path = currentPath(1:index-2);
+        end
 
     end
 
