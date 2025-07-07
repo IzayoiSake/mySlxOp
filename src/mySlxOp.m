@@ -266,14 +266,6 @@ classdef mySlxOp
                 end
             end
 
-            persistent overwriteAll;
-            persistent lastTimeSeconds;
-            if isempty(overwriteAll)
-                overwriteAll = false;
-                % 获取当前时间
-                lastTimeSeconds = datetime('now');
-            end
-
             % 创建 Simulink.Parameter
             param = Simulink.Parameter;
             param.Value = value;
@@ -282,6 +274,15 @@ classdef mySlxOp
             param.CoderInfo.CustomStorageClass = 'ConstVolatile';
             param.CoderInfo.CustomAttributes.HeaderFile = append(headerName, ".h");
             param.CoderInfo.CustomAttributes.DefinitionFile = append(headerName, ".c");
+
+
+            persistent choiceAll;
+            persistent lastTimeSeconds;
+            if isempty(choiceAll)
+                choiceAll = int16(0);
+                % 获取当前时间
+                lastTimeSeconds = datetime('now');
+            end
         
             nowTimeSeconds = datetime('now');
             % 检查变量是否已存在
@@ -292,23 +293,25 @@ classdef mySlxOp
                 warning('Variable %s already exists. Force Overwriting it.', name);
                 assignin('base', name, param);
             else
-                if (overwriteAll && (nowTimeSeconds - lastTimeSeconds) < seconds(5))
+                if (choiceAll == 1 && (nowTimeSeconds - lastTimeSeconds) < seconds(5))
                     warning('Variable %s already exists. But choose to overwrite it.', name);
                     assignin('base', name, param);
+                elseif (choiceAll == -1 && (nowTimeSeconds - lastTimeSeconds) < seconds(5))
+                    warning('Variable %s already exists. But choose not to overwrite it.', name);
                 else
-                    overwriteAll = false;
+                    choiceAll = int16(0);
                     evalin('base', name)
-                    choice = questdlg(['Variable ', name, ' already exists. Do you want to overwrite it?'], ...
-                        'Variable Exists', ...
-                        'All', 'Yes', 'No', 'Yes'...
-                    ); 
+                    questStr = append("Variable ", name, " already exists. Do you want to overwrite it?");
+                    choice = menu(questStr, 'AllYes', 'AllNo', 'Yes', 'No');
                     switch choice
-                        case 'All'
-                            overwriteAll = true;
+                        case 1
+                            choiceAll = int16(1);
                             assignin('base', name, param);
-                        case 'Yes'
+                        case 2
+                            choiceAll = int16(-1);
+                        case 3
                             assignin('base', name, param);
-                        case 'No'
+                        case 4
                             return;
                     end
                 end
@@ -385,17 +388,48 @@ classdef mySlxOp
             param.CoderInfo.CustomStorageClass = 'ExportToFile';
             param.CoderInfo.CustomAttributes.HeaderFile = [headerName, '.h'];
             param.CoderInfo.CustomAttributes.DefinitionFile = [headerName, '.c'];
-            
 
-            % 检查变量是否存在
+
+            persistent choiceAll;
+            persistent lastTimeSeconds;
+            if isempty(choiceAll)
+                choiceAll = int16(0);
+                % 获取当前时间
+                lastTimeSeconds = datetime('now');
+            end
+        
+            nowTimeSeconds = datetime('now');
+            % 检查变量是否已存在
             codeStr = append("exist('", name, "', 'var')");
-            if (evalin('base', codeStr) == 0) || force
+            if (evalin('base', codeStr) == 0)
+                assignin('base', name, param);
+            elseif force
+                warning('Variable %s already exists. Force Overwriting it.', name);
                 assignin('base', name, param);
             else
-                evalin('base', name);
-                if strcmp(questdlg(['Variable ', name, ' already exists. Do you want to overwrite it?'], 'Variable Exists', 'Yes', 'No', 'Yes'), 'Yes')
+                if (choiceAll == 1 && (nowTimeSeconds - lastTimeSeconds) < seconds(5))
+                    warning('Variable %s already exists. But choose to overwrite it.', name);
                     assignin('base', name, param);
+                elseif (choiceAll == -1 && (nowTimeSeconds - lastTimeSeconds) < seconds(5))
+                    warning('Variable %s already exists. But choose not to overwrite it.', name);
+                else
+                    choiceAll = int16(0);
+                    evalin('base', name)
+                    questStr = append("Variable ", name, " already exists. Do you want to overwrite it?");
+                    choice = menu(questStr, 'AllYes', 'AllNo', 'Yes', 'No');
+                    switch choice
+                        case 1
+                            choiceAll = int16(1);
+                            assignin('base', name, param);
+                        case 2
+                            choiceAll = int16(-1);
+                        case 3
+                            assignin('base', name, param);
+                        case 4
+                            return;
+                    end
                 end
+                lastTimeSeconds = datetime('now');
             end
         end
         
@@ -1616,7 +1650,7 @@ classdef mySlxOp
                         elseif isnumeric(workSpaceVar)
                             workSpaceVar = eval(evalFunc);
                         end
-                        assignin('base', dataName{j}, workSpaceVar);
+                        assignin('base', thisDataName, workSpaceVar);
                     catch
                         disp(append("Error: ", dataName{j}));
                         continue;
@@ -2515,7 +2549,68 @@ classdef mySlxOp
                 isOk = false;
             end
         end
-    
+
+    %% mat文件处理
+    function saveMatByStruct(opts)
+    % saveMatByStruct 保存基础工作区中的数据到mat文件, 以Struct的形式保存
+        arguments
+            opts.filePath (1,1) string = "";
+            opts.fileName (1,1) string = "data";
+        end
+
+        if strcmp(opts.filePath, "")
+            f = figure('Renderer' , 'painters' , 'Position' , [-100 -100 0 0]);
+            [fileName, fileDir] = uiputfile('*.mat', 'Save MAT file', opts.fileName + ".mat");
+            close(f);
+            if isequal(fileName, 0) || isequal(fileDir, 0)
+                return;
+            end
+            opts.filePath = fullfile(fileDir, fileName);
+        end
+
+        % 从基础工作区获取数据
+        dataName = evalin('base', 'who');
+        data = struct('name', {}, 'data', {}, 'class', {});
+        for i = 1:numel(dataName)
+            % 获取数据
+            thisName = dataName{i};
+            thisData = evalin('base', dataName{i});
+            tempData = mySlxOp.getStruct(thisData, thisName);
+            thisDataStruct = tempData;
+            data(i) = thisDataStruct;
+        end
+        data = data(:);
+        % 保存数据到mat文件
+        save(opts.filePath, "data");
+    end
+
+    function outStruct = getStruct(var, name)
+        outStruct = struct('name', {}, 'data', {}, 'class', {});
+        if ~isobject(var)
+            outStructTemp = struct('name', name, 'data', var, 'class', class(var));
+            outStruct = [outStruct; outStructTemp];
+            return;
+        end
+        for q = 1:numel(var)
+            thisVar = var(q);
+            try
+                fieldnames = fields(thisVar);
+            catch
+                outStructTemp = struct('name', name, 'data', thisVar, 'class', class(thisVar));
+                outStruct = [outStruct; outStructTemp];
+                continue;
+            end
+            for i = 1:numel(fieldnames)
+                fieldName = fieldnames{i};
+                thisField = thisVar.(fieldName);
+                tempData = mySlxOp.getStruct(thisField, fieldName);
+                data.(fieldName) = tempData;
+            end
+            outStructTemp = struct('name', name, 'data', data, 'class', class(thisVar));
+            outStruct = [outStruct; outStructTemp];
+        end
+    end
+
 
     %% 路径处理函数
         function path = getZinSightPath()
@@ -2871,5 +2966,4 @@ classdef mySlxOp
         end
 
     end
-
 end
