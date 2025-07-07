@@ -715,108 +715,22 @@ classdef mySlxOp
                 return;
             end
 
-            % 调用模型的搜索功能,查找变量是否在模型中被使用
-            modelBlocks = find_system(modelName);
-            modelSignals = find_system(modelName, 'FindAll', 'on', 'type', 'line');
-            modelSignals = num2cell(modelSignals);
-            % 遍历modelBlocks, 获取每个block的全部参数名
-            blockParamNames = cell(length(modelBlocks), 1);
-            blockParamContents = cell(length(modelBlocks), 1);
-            for i = 1:length(modelBlocks)
-                block = modelBlocks{i};
-                blockParams = get_param(block, 'ObjectParameters');
-                tempBlockParamNames = fieldnames(blockParams);
-                tempBlockParamContents = cell(length(tempBlockParamNames), 1);
-                indexTemp = zeros(length(tempBlockParamNames), 1);
-                for j = 1:length(tempBlockParamNames)
-                    try
-                        thisParam = get_param(block, tempBlockParamNames{j});
-                        tempBlockParamContents{j, 1} = thisParam;
-                        % 检测thisParam是否为字符串
-                        if ischar(thisParam)
-                            indexTemp(j) = 1;
-                        end
-                    catch
-                    end
-                end
-                blockParamNames{i} = tempBlockParamNames(indexTemp == 1);
-                blockParamContents{i} = tempBlockParamContents(indexTemp == 1);
-            end
-            % 遍历modelSignals, 获取每个signal的全部参数名
-            signalParamNames = cell(length(modelSignals), 1);
-            signalParamContents = cell(length(modelSignals), 1);
-            for i = 1:length(modelSignals)
-                signal = modelSignals{i};
-                signalParams = get_param(signal, 'ObjectParameters');
-                tempSignalParamNames = fieldnames(signalParams);
-                tempSignalParamContents = cell(length(tempSignalParamNames), 1);
-                indexTemp = zeros(length(tempSignalParamNames), 1);
-                for j = 1:length(tempSignalParamNames)
-                    try
-                        thisParam = get_param(signal, tempSignalParamNames{j});
-                        tempSignalParamContents{j, 1} = thisParam;
-                        % 检测thisParam是否为字符串
-                        if ischar(thisParam)
-                            indexTemp(j) = 1;
-                        end
-                    catch
-                    end
-                end
-                signalParamNames{i} = tempSignalParamNames(indexTemp == 1);
-                signalParamContents{i} = tempSignalParamContents(indexTemp == 1);
-            end
+            % 从系统获取一个临时文件
+            tempMdlFilePath = tempname;
+            tempMdlFilePath = append(tempMdlFilePath, '.mdl');
+            % 将当前模型保存到临时文件, 以mdl格式
+            save_system(modelName, tempMdlFilePath, 'OverwriteIfChangedOnDisk', true);
+            % 以文本格式读取临时文件
+            tempMdlText = fileread(tempMdlFilePath);
+            % 删除临时文件
+            delete(tempMdlFilePath);
 
             disp('初始化完成, 开始清除变量...');
 
-            
-            % 遍历工作区中的变量
+            % 清除工作区中的无用变量
             for i = 1:length(vars)
                 varName = vars{i};
                 isClear = true;
-                % 从基础工作区中获取变量内容
-                varContent = evalin('base', varName);
-                % 如果变量的数据类型不是Simulink.Signal, Simulink.Bus或Simulink.Parameter,则不清除
-                if ~isa(varContent, 'Simulink.Signal') && ~isa(varContent, 'Simulink.Bus') && ~isa(varContent, 'Simulink.Parameter')
-                    disp(['变量 ' varName ' 的数据类型不是Simulink.Signal, Simulink.Bus或Simulink.Parameter, 不清除']);
-                    continue;
-                end
-                % 如果变量名在模型中被使用,则不清除
-                for j = 1:length(modelBlocks)
-                    if ~isClear
-                        break;
-                    end
-                    for k = 1:length(blockParamNames{j})
-                        try
-                            tempContent = blockParamContents{j}{k};
-                            % 检测tempContent是否为字符串
-                            if ~ischar(tempContent)
-                                continue;
-                            end
-                            if contains(tempContent, varName)
-                                isClear = false;
-                                break;
-                            end
-                        catch errorMsg
-                            keyboard;
-                        end
-                    end
-                end
-                for j = 1:length(modelSignals)
-                    if ~isClear
-                        break;
-                    end
-                    for k = 1:length(signalParamNames{j})
-                        tempContent = signalParamContents{j}{k};
-                        % 检测tempContent是否为字符串
-                        if ~ischar(tempContent)
-                            continue;
-                        end
-                        if contains(tempContent, varName)
-                            isClear = false;
-                            break;
-                        end
-                    end
-                end
                 % 如果变量名在CtrlPar或HWPar中被使用,则不清除
                 for j = 1:length(ctrlParData.param)
                     if ~isClear
@@ -836,23 +750,15 @@ classdef mySlxOp
                         break;
                     end
                 end
-                
+                % 如果变量名在模型文本中被使用,则不清除
+                if isClear && contains(tempMdlText, varName)
+                    isClear = false;
+                end
+
                 if isClear
-                    % 断点暂停执行
-                    % keyboard;
                     disp(['是否清除变量: ' varName]);
-                    % % 等待用户输入
-                    % keyboard;
-                    % userChoice = input('Y/N [N]: ', 's');
-                    % if isempty(userChoice)
-                    %     userChoice = 'N';
-                    % end
-                    % if strcmpi(userChoice, 'Y')
-                    %     % 清除变量
-                    %     evalin('base', ['clear ' varName]);
-                    % end
                     evalin('base', ['clear ' varName]);
-                    clearedVars{end+1} = varName;
+                    clearedVars{end+1, 1} = varName;
                 end
             end
         end
