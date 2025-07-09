@@ -676,50 +676,64 @@ classdef mySlxOp
         end
 
 
-        function clearedVars = clearMat()
+        function clearedVars = clearMat(opts)
         % 清除基础工作区中的无用的变量
+
+            arguments
+                opts.modelName = '';
+                opts.hwParFilePath = '';
+                opts.ctrlParFilePath = '';
+            end
+
             clearedVars = {};
             % 读取工作区中的所有变量
             vars = evalin('base', 'who');
             % 获取当前模型的名称
-            modelName = bdroot(gcs);
-            if isempty(modelName)
+            if isempty(opts.modelName)
+                opts.modelName = bdroot;
+            end
+            opts.modelName = bdroot;
+            if isempty(opts.modelName)
                 disp('没有打开模型, 请先打开一个模型');
                 return;
             end
-            function [hwParData, hwParFilePath] = readHWPar()
-                [hwParFileName, hwParFileDir] = uigetfile('*.xlsx;*.xls', '选择HW数据文件');
-                hwParFilePath = fullfile(hwParFileDir, hwParFileName);
-                % hwParFilePath = 'D:\Projects\01_CM60\03_AFE\HwPar\HwPar02_Afe\HwPar02_Afe.xlsx';
+            function [hwParData, hwParFilePath] = readHWPar(hwParFilePath)
                 if isempty(hwParFilePath)
-                    return;
+                    % 如果没有传入 hwParFilePath, 则让用户选择
+                    [hwParFileName, hwParFileDir] = uigetfile('*.xlsx;*.xls', '选择HW数据文件');
+                    hwParFilePath = fullfile(hwParFileDir, hwParFileName);
+                    if isempty(hwParFilePath)
+                        return;
+                    end
                 end
                 hwParData = readtable(hwParFilePath);
             end
-            function [ctrlParData, ctrlParFilePath] = readCtrlPar()
-                [ctrlParFileName, ctrlParFileDir] = uigetfile('*.xlsx;*.xls', '选择Ctrl数据文件');
-                ctrlParFilePath = fullfile(ctrlParFileDir, ctrlParFileName);
-                % ctrlParFilePath = 'D:\Projects\01_CM60\03_AFE\CtrlPar\CtrlPar02_Afe\CtrlPar02_Afe.xlsx';
+            function [ctrlParData, ctrlParFilePath] = readCtrlPar(ctrlParFilePath)
                 if isempty(ctrlParFilePath)
-                    return;
+                    [ctrlParFileName, ctrlParFileDir] = uigetfile('*.xlsx;*.xls', '选择Ctrl数据文件');
+                    ctrlParFilePath = fullfile(ctrlParFileDir, ctrlParFileName);
+                    % ctrlParFilePath = 'D:\Projects\01_CM60\03_AFE\CtrlPar\CtrlPar02_Afe\CtrlPar02_Afe.xlsx';
+                    if isempty(ctrlParFilePath)
+                        return;
+                    end
                 end
                 ctrlParData = readtable(ctrlParFilePath);
             end
             % % 读取CtrlPar和HWPar数据(用户选择Excel文件)
-            [ctrlParData, ctrlParFilePath] = readCtrlPar();
+            [ctrlParData, ctrlParFilePath] = readCtrlPar(opts.ctrlParFilePath);
             if isempty(ctrlParFilePath)
                 return;
             end
-            [hwParData, hwParFilePath] = readHWPar();
+            [hwParData, hwParFilePath] = readHWPar(opts.hwParFilePath);
             if isempty(hwParFilePath)
                 return;
             end
 
             % 从系统获取一个临时文件
             tempMdlFilePath = tempname;
-            tempMdlFilePath = append(tempMdlFilePath, '.mdl');
-            % 将当前模型保存到临时文件, 以mdl格式
-            save_system(modelName, tempMdlFilePath, 'OverwriteIfChangedOnDisk', true);
+            tempMdlFilePath = append(tempMdlFilePath, '.xml');
+            % 将当前模型保存到临时文件, 以xml格式
+            save_system(opts.modelName, tempMdlFilePath, 'OverwriteIfChangedOnDisk', true, 'ExportToXML', true);
             % 以文本格式读取临时文件
             tempMdlText = fileread(tempMdlFilePath);
             % 删除临时文件
@@ -1346,7 +1360,7 @@ classdef mySlxOp
             end
             isOk = mySlxOp.checkAllLineLog('line', line);
             if ~isOk
-                error(append("Error [getLineDataType]: """, thisLineFullId, """ not found in allLine."));
+                error(append("Error [getLineDataType]: there is a line not in allLineLog, please run mySlxOp.logAllLine() and check."));
             end
 
             lineDataType = cell(length(line), 1);
