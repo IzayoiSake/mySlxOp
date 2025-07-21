@@ -1,5 +1,6 @@
-function saveMat(opts)
-% saveMat - Save the figure data to a .mat file
+% save_Mat - 使用旧版本Matlab, 保存基础工作区为mat文件
+function save_Mat(opts)
+% save_Mat - 使用旧版本Matlab, 保存基础工作区为mat文件
     arguments
         opts.filePath (1,1) string = "";
     end
@@ -31,12 +32,6 @@ function saveMat(opts)
     if ~isfile(tempNamePath)
         error("临时.m文件创建失败: %s", tempNamePath);
     end
-    % 检查, 如果同步生成了.mat文件，则删除它
-    companionFilePath = append(myTempName, ".mat");
-    if isfile(companionFilePath)
-        delete(companionFilePath);
-        disp(append("删除同步生成的.mat文件: ", companionFilePath));
-    end
     try
         matlabExe = findMatlab(version="R2023b");
         matlabExe = append(matlabExe, '.exe');
@@ -49,9 +44,21 @@ function saveMat(opts)
     catch ME
         disp("Matlab调用失败");
         delete(tempNamePath);
+        % 检查, 如果同步生成了.mat文件，则删除它
+        companionFilePath = append(myTempName, ".mat");
+        if isfile(companionFilePath)
+            delete(companionFilePath);
+            disp(append("删除同步生成的.mat文件: ", companionFilePath));
+        end
         error(ME.message);
     end
     % 删除临时.m文件
     delete(tempNamePath);
+    % 检查, 如果同步生成了.mat文件，则删除它
+    companionFilePath = append(myTempName, ".mat");
+    if isfile(companionFilePath)
+        delete(companionFilePath);
+        disp(append("删除同步生成的.mat文件: ", companionFilePath));
+    end
     disp("完成");
 end

@@ -1918,6 +1918,34 @@ classdef mySlxOp
         end
 
 
+        function sigList = getLineSignalHierarchy(opts)
+        % 获取选中的信号线的信号层次结构
+            arguments
+                opts.line = '';
+            end
+            line = mySlxOp.checkLine(opts.line);
+            
+            sigList = cell(0);
+            for i = 1:length(line)
+                thisLine = line{i};
+                % 获取线的源端口
+                srcPort = thisLine.SrcPortHandle;
+                if isempty(srcPort)
+                    continue;
+                end
+                % 获取源端口的信号层次结构
+                srcPort = mySlxOp.checkBlock(srcPort);
+                srcPort = srcPort{1};
+                signalHierarchy = srcPort.SignalHierarchy;
+                if isempty(signalHierarchy)
+                    continue;
+                end
+                sigListTemp = mySlxOp.parseSignalHierarchy(signalHierarchy);
+                sigList = [sigList; sigListTemp];
+            end
+        end
+
+
         function sigList = getBlockSignalHierarchy(opts)
             
             arguments
