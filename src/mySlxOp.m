@@ -2,6 +2,18 @@
 classdef mySlxOp
 
     methods(Static)
+        %% Simulink系统本身的基本操作
+        function slRestart()
+            % SLRESTART 重启 Simulink
+            %
+            %   SLRESTART() 关闭所有打开的 Simulink 模型并重新启动 Simulink。
+            %
+            %   示例：
+            %       slRestart();
+            %
+            sl_refresh_customizations();
+        end
+
 
         %% 当前系统的Object的基础功能
         function block = checkBlock(block)
@@ -86,6 +98,116 @@ classdef mySlxOp
                 end
             end
         end
+
+        function ports = getBlockPort(opts)
+
+            arguments
+                opts.block = '';
+                opts.portType string = "";
+                opts.portNum double {mustBeInteger} = 0;
+            end
+
+            % 将opts.portType全转成小写
+            opts.portType = lower(opts.portType);
+            for i = 1:length(opts.portType)
+                if strcmp(opts.portType(i), "input")
+                    opts.portType(i) = "inport";
+                elseif strcmp(opts.portType(i), "output")
+                    opts.portType(i) = "outport";
+                end
+            end
+
+            opts.block = mySlxOp.checkBlock(opts.block);
+            if length(opts.block) ~= 1
+                error('getBlockPort: Please specify exactly one block.');
+            end
+            if (length(opts.block) ~= length(opts.portType)) && (length(opts.portType) ~= 1)
+                error('getBlockPort: The length of block and portType must be the same or portType must be a single value.');
+            elseif (length(opts.block) ~= length(opts.portType)) && (length(opts.portType) == 1)
+                opts.portType = repmat(opts.portType, length(opts.block), 1);
+            end
+
+            for i = 1:length(opts.block)
+                thisBlock = opts.block{i};
+                ph = get_param(thisBlock.Handle, 'PortHandles');
+
+                if opts.portType(i) == ""   % 没指定 portType → 返回所有
+                    ports{i} = [ph.Inport(:); ph.Outport(:)];
+
+                elseif opts.portNum == 0   % 指定 portType 但没指定 portNum → 返回该类全部
+                    switch opts.portType(i)
+                        case "inport"
+                            ports{i} = ph.Inport(:);
+                        case "outport"
+                            ports{i} = ph.Outport(:);
+                    end
+
+                else   % 指定 portType + portNum → 返回单个
+                    switch opts.portType(i)
+                        case "inport"
+                            phs = ph.Inport;
+                        case "outport"
+                            phs = ph.Outport;
+                    end
+
+                    if opts.portNum > length(phs)
+                        error('getBlockPort: %s only has %d ports, requested %d.', ...
+                            opts.portType(i), length(phs), opts.portNum);
+                    end
+                    ports{i} = phs(opts.portNum);
+                end
+            end
+
+            thePorts = [];
+            for i = 1:length(ports)
+                thisPorts = ports{i};
+                for j = 1:length(thisPorts)
+                    thePorts = [thePorts; mySlxOp.parseBlock(thisPorts(j))];
+                end
+            end
+            thePorts = thePorts(:);
+            ports = thePorts;
+        end
+
+        function line = getBlockPortLines(opts)
+
+            arguments
+                opts.block = '';
+                opts.portType string = "";
+                opts.portNum double {mustBeInteger} = 0;
+            end
+
+            % 将opts.portType全转成小写
+            opts.portType = lower(opts.portType);
+            for i = 1:length(opts.portType)
+                if strcmp(opts.portType(i), "input")
+                    opts.portType(i) = "inport";
+                elseif strcmp(opts.portType(i), "output")
+                    opts.portType(i) = "outport";
+                end
+            end
+
+            ports = mySlxOp.getBlockPort(...
+                'block', opts.block, ...
+                'portType', opts.portType, ...
+                'portNum', opts.portNum ...
+            );
+
+            line = [];
+            for i = 1:length(ports)
+                thisPort = ports{i};
+                thisLines = get_param(thisPort.Handle, 'Line');
+                for j = 1:length(thisLines)
+                    if isempty(thisLines(j)) || thisLines(j) == -1
+                        continue;
+                    end
+                    line = [line; mySlxOp.parseLine(thisLines(j))];
+                end
+            end
+            line = line(:);
+        end
+
+
 
 
         %% Bus Creator/Selector的相关功能
@@ -435,7 +557,7 @@ classdef mySlxOp
         
         
         %% 控制参数的相关功能
-        function [parNames, parValues] = getCtrlParofSys(opts)
+        function [parNames, parValues] = ctrlPar_getBlockPars(opts)
 
             arguments
                 opts.block = '';
@@ -498,6 +620,35 @@ classdef mySlxOp
                 end
             end
         end
+
+
+
+        function ctrlPar_bws2mws(opts)
+            % 将基础工作区中的控制参数复制到模型工作区中
+
+            arguments
+                opts.block = '';
+            end
+
+            block = opts.block;
+            block = mySlxOp.checkBlock(block);
+            if isempty(block)
+                block = bdroot;
+            end
+            block = mySlxOp.checkBlock(block);
+            [parNames, ~] = mySlxOp.ctrlPar_getBlockPars('block', block);
+
+            mws = get_param(bdroot(block{1}.Handle), 'ModelWorkspace');
+
+            for i = 1:length(parNames)
+                parName = parNames{i};
+                % 将基础工作区中的变量复制到模型工作区中
+                val = evalin('base', parName);
+                assignin(mws, parName, val);
+                disp(append("已将变量 ", parName, " 从 基础工作区 复制到 模型工作区 "));
+            end
+        end
+
 
 
         function addOvrdParFunc(opts)
@@ -1027,7 +1178,7 @@ classdef mySlxOp
             end
 
             block = opts.block;
-            direction = opts.direction;
+            direction = opts.kind;
 
             block = mySlxOp.checkBlock(block);
 
@@ -1403,9 +1554,98 @@ classdef mySlxOp
             end
         end
 
+        % lineFixName
+        function lineFixName(opts)
+        % LINEFIXNAME  修正信号线名称中的非法字符
+        %   lineFixName(OPTIONS) 遍历指定的 Simulink 信号线句柄
+
+            arguments
+                opts.line = '';
+            end
+
+            line = opts.line;
+
+            line = mySlxOp.checkLine(line);
+
+            if isempty(line)
+                return;
+            end
+
+            for i = 1:length(line)
+                thisLine = line{i};
+                lineName = get_param(thisLine.Handle, 'Name');
+                if isempty(lineName)
+                    continue;
+                end
+                % 定义非法字符及其替换字符
+                illegalChars = {"<"; ">"};
+                replaceChar = '';
+                % 替换非法字符
+                for j = 1:length(illegalChars)
+                    lineName = strrep(lineName, illegalChars{j}, replaceChar);
+                end
+                % 设置新的线名称
+                set_param(thisLine.Handle, 'Name', lineName);
+            end
+        end
+
+
+        % 将line按照position排序, 从上到下, 从左到右
+        function line = line_sortByPosition(opts)
+
+            arguments
+                opts.line = '';
+            end
+
+            line = opts.line;
+
+            line = mySlxOp.checkLine(line);
+
+            if isempty(line)
+                return;
+            end
+
+            positions = zeros(length(line), 4); % 每行存储一个线的位置 [left, top, right, bottom]
+
+            for i = 1:length(line)
+                thisLine = line{i};
+                pos = get_param(thisLine.Handle, 'Points');
+                left = min(pos(:, 1));
+                right = max(pos(:, 1));
+                top = min(pos(:, 2));
+                bottom = max(pos(:, 2));
+                positions(i, :) = [left, top, right, bottom];
+            end
+
+            % 按照 top 从小到大排序, 如果 top 相同则按照 left 从小到大排序
+            [~, sortIdx] = sortrows(positions, [2, 1]);
+            line = line(sortIdx);
+        end
+
+
 
         %% GoTo / From 模块的相关功能
+
         function goFromflushLineName(opts)
+        % GOFROMFLUSHLINENAME  将 GoTo / From 模块的名字赋值给对应的信号线
+        %
+        %   goFromflushLineName(OPTIONS) 遍历指定的 Simulink 模块句柄，
+        %   对于 GoTo 模块，将其 GotoTag 名称赋值给输入信号线；
+        %   对于 From 模块，将其 GotoTag 名称赋值给输出信号线。
+        %
+        %   输入参数 (OPTIONS 结构体)：
+        %       block : char | cell | string
+        %           待处理的模块路径或句柄。如果为空，则使用当前选择的模块。
+        %
+        %   输出参数：
+        %       无（函数直接修改模型中信号线的名称）。
+        %
+        %   示例：
+        %       % 对当前选择的 GoTo / From 模块进行信号线重命名
+        %       goFromflushLineName();
+        %
+        %       % 指定模块路径
+        %       goFromflushLineName(struct('block', 'myModel/Goto1'));
 
             arguments
                 opts.block = '';
@@ -1448,6 +1688,321 @@ classdef mySlxOp
             end
         end
 
+        function goFromLine2BlockTag(opts)
+        % GOFROMLINE2BLOCKTAG  将信号线的名字赋值给对应的 GoTo / From 模块
+        %
+        %   goFromLine2BlockTag(OPTIONS) 遍历指定的 Simulink 模块句柄，
+        %   对于 GoTo 模块，将其输入信号线的名称赋值给 GotoTag；
+        %   对于 From 模块，将其输出信号线的名称赋值给 GotoTag。
+        %
+        %   输入参数 (OPTIONS 结构体)：
+        %       block : char | cell | string
+        %           待处理的模块路径或句柄。如果为空，则使用当前选择的模块。
+        %
+        %   输出参数：
+        %       无（函数直接修改模型中模块的 GotoTag 属性）。
+        %
+        %   示例：
+        %       % 对当前选择的 GoTo / From 模块进行信号线 → 模块名的重命名
+        %       goFromLine2BlockTag();
+        %
+        %       % 指定模块路径
+        %       goFromLine2BlockTag(struct('block', 'myModel/From1'));
+
+            arguments
+                opts.block = '';
+            end
+
+            block = opts.block;
+            block = mySlxOp.checkBlock(block);
+
+            if isempty(block)
+                return;
+            end
+
+            for i = 1:length(block)
+                thisBlock = block{i};
+                if strcmp(thisBlock.BlockType, 'Goto')
+                    % 获取Goto模块的输入端口
+                    inports = get_param(thisBlock.Handle, 'PortHandles');
+                    inport = inports.Inport(1);
+                    % 获取输入信号线的名字
+                    line = get_param(inport, 'Line');
+                    lineName = get_param(line, 'Name');
+                    if ~isempty(lineName)
+                        % 将线的名字赋值给GotoTag
+                        set_param(thisBlock.Handle, 'GotoTag', lineName);
+                    end
+                end
+                if strcmp(thisBlock.BlockType, 'From')
+                    % 获取From模块的输出端口
+                    outports = get_param(thisBlock.Handle, 'PortHandles');
+                    outport = outports.Outport(1);
+                    % 获取输出信号线的名字
+                    line = get_param(outport, 'Line');
+                    lineName = get_param(line, 'Name');
+                    if ~isempty(lineName)
+                        % 将线的名字赋值给GotoTag
+                        set_param(thisBlock.Handle, 'GotoTag', lineName);
+                    end
+                end
+            end
+        end
+
+
+        %% in/out port 模块的相关功能
+        function inOutPortLine2BlockName(opts)
+        % INOUTPORTLINE2BLOCKNAME  将 in/out port 模块的信号线名字赋值给模块名字
+        %
+        %   inOutPortLine2BlockName(OPTIONS) 遍历指定的 Simulink 模块句柄，
+        %   对于 Inport/Outport 模块，将其输入信号线的名称赋值给模块名称；
+        %   如果信号线名称为空，则跳过该模块。
+        %
+        %   输入参数 (OPTIONS 结构体)：
+        %       block : char | cell | string
+        %           待处理的模块路径或句柄。如果为空，则使用当前选择的
+        %           模块。
+        %       block : char | cell | string
+        %           待处理的模块路径或句柄。如果为空，则使用当前选择的
+        %           模块。
+        %   输出参数：
+        %       无（函数直接修改模型中模块的名称）。
+        %   示例：
+        %       % 对当前选择的 Inport/Outport 模块进行信号线 → 模块名的重命名
+        %       inOutPortLine2BlockName();
+        %       %       % 指定模块路径
+        %       inOutPortLine2BlockName(struct('block', 'myModel/Inport1'));
+            arguments
+                opts.block = '';
+            end
+
+            block = opts.block;
+            block = mySlxOp.checkBlock(block);
+
+            if isempty(block)
+                return;
+            end
+
+            for i = 1:length(block)
+                thisBlock = block{i};
+                if strcmp(thisBlock.BlockType, 'Inport') || strcmp(thisBlock.BlockType, 'Outport')
+                    % 获取模块的端口
+                    ports = get_param(thisBlock.Handle, 'PortHandles');
+                    if strcmp(thisBlock.BlockType, 'Inport')
+                        port = ports.Outport(1);
+                    else
+                        port = ports.Inport(1);
+                    end
+                    % 获取端口的连接线
+                    line = get_param(port, 'Line');
+                    % 获取线的名字
+                    lineName = get_param(line, 'Name');
+                    if ~isempty(lineName)
+                        % 将线的名字赋值给模块名
+                        set_param(thisBlock.Handle, 'Name', lineName);
+                    end
+                end
+            end
+        end
+
+        function inOutPortBlock2LineName(opts)
+        % BLOCK2LINENAME  将模块名字赋值给其相连信号线
+        %
+        %   Block2LineName(OPTIONS) 遍历指定的 Simulink 模块句柄，
+        %   对于其输入/输出端口的连接信号线，将模块的名字赋值给信号线名称。
+        %   如果信号线已有名字，则会被覆盖。
+        %
+        %   输入参数 (OPTIONS 结构体)：
+        %       block : char | cell | string
+        %           待处理的模块路径或句柄。如果为空，则使用当前选择的模块。
+        %
+        %   输出参数：
+        %       无（函数直接修改模型中信号线的名称）。
+        %
+        %   示例：
+        %       % 对当前选择的模块进行模块名 → 信号线名的重命名
+        %       Block2LineName();
+        %       % 指定模块路径
+        %       Block2LineName(struct('block', 'myModel/Gain'));
+
+            arguments
+                opts.block = '';
+            end
+
+            block = opts.block;
+            block = mySlxOp.checkBlock(block); % 你自己定义的工具函数
+
+            if isempty(block)
+                return;
+            end
+
+            for i = 1:length(block)
+                thisBlock = block{i};
+                blockName = get_param(thisBlock.Handle, 'Name');
+
+                % 获取端口
+                ports = get_param(thisBlock.Handle, 'PortHandles');
+                allPorts = [ports.Inport, ports.Outport];
+
+                for p = 1:length(allPorts)
+                    port = allPorts(p);
+                    if port <= 0
+                        continue;
+                    end
+                    % 获取连接线
+                    line = get_param(port, 'Line');
+                    if line > 0
+                        % 修改线的名称为模块名称
+                        set_param(line, 'Name', blockName);
+                    end
+                end
+            end
+        end
+
+
+
+        %% TestSequence 模块的相关功能
+
+        function testSequence_addSymbolByLineName(opts)
+        % TESTSEQUENCE_ADDSYMBOLBYLINENAME  根据连接线名称向 Test Sequence 模块添加符号
+        %
+        %   testSequence_addSymbolByLineName(opts) 会检查指定的 Test Sequence 模块，
+        %   根据输入的连接线对象名称自动在模块中添加相应的符号。如果符号已存在，
+        %   则不会重复添加。
+        %
+        %   输入参数 (opts 结构体):
+        %       opts.block   - Test Sequence 模块句柄或路径 (字符串或 cell 数组)
+        %       opts.line    - Simulink 连接线对象 (字符串或 cell 数组)
+        %       opts.scope   - 符号作用域 (可选)，必须是以下之一：
+        %                         'Input' | 'Output' | 'Local' | ...
+        %                         'Constant' | 'Parameter' | 'Data Store Memory'
+        %                      默认值为 'Input'。
+        %
+        %   示例:
+        %       testSequence_addSymbolByLineName( ...
+        %           block = gcb, ...
+        %           line = get_param(gcl,'LineHandles'), ...
+        %           scope = 'Input');
+        %
+        %   说明:
+        %       - 如果指定的 block 不是 Test Sequence 模块，则跳过。
+        %       - 如果 line 没有名称，则不会生成符号。
+        %       - 使用 sltest.testsequence.addSymbol 添加新符号。
+
+            arguments
+                opts.block = '';
+                opts.line = '';
+                opts.scope {mustBeTextScalar} = "Input";
+            end
+
+            opts.scope = string(opts.scope);
+            mustBeMember(opts.scope, ["Input";"Output";"Local";"Constant";"Parameter";"Data Store Memory"]);
+
+            block = opts.block;
+            line = opts.line;
+            scope = opts.scope;
+            
+            block = mySlxOp.checkBlock(block);
+            line = mySlxOp.checkLine(line);
+
+            if isempty(block) || isempty(line)
+                return;
+            end
+
+            line = mySlxOp.line_sortByPosition('line', line);
+            lineNames = [];
+            for i = 1:length(line)
+                thisLine = line{i};
+                thisLineName = get_param(thisLine.Handle, 'Name');
+                thisLineName = string(thisLineName);
+                if ~isempty(thisLineName)
+                    lineNames = [lineNames; thisLineName];
+                end
+            end
+
+            % 检查 block 是否为 TestSequence 模块
+            symbolNames = lineNames;
+            for i = 1:length(block)
+                thisBlock = block{i};
+                isTestSequence = mySlxOp.isTestSequence(thisBlock);
+                if ~isTestSequence
+                    continue;
+                end
+
+                % 获取当前全部的 symbol 名称
+                existingSymbols = sltest.testsequence.findSymbol(thisBlock.getFullName());
+
+                for j = 1:length(symbolNames)
+                    thisSymbolName = symbolNames{j};
+                    % 检查 symbol 是否已存在
+                    if ~isempty(existingSymbols)
+                        if any(strcmp({existingSymbols.Name}, thisSymbolName))
+                            continue;
+                        end
+                    end
+                    % 添加 symbol
+                    sltest.testsequence.addSymbol(thisBlock.getFullName(), thisSymbolName, 'Data', scope);
+                end
+            end
+        end
+
+        function testSequence_setSymbolDataType(opts)
+        % TESTSEQUENCE_SETSYMBOLDATATYPE  将 Test Sequence 模块中符号的数据类型设置为 "Inherit: Same as Simulink"
+        %
+        %   testSequence_setSymbolDataType(opts) 会检查指定的 Test Sequence 模块，
+        %   将其中所有符号（Scope 为 "Input" 或 "Output"）的数据类型批量设置为
+        %   "Inherit: Same as Simulink"。
+        %
+        %   输入参数 (opts 结构体):
+        %       opts.block   - Test Sequence 模块句柄或路径 (字符串或 cell 数组)
+        %
+        %   示例:
+        %       testSequence_setSymbolDataType(block = gcb);
+        %
+        %   说明:
+        %       - 如果指定的 block 不是 Test Sequence 模块，则跳过。
+        %       - 仅修改 Scope 为 "Input" 或 "Output" 的符号，其它符号不受影响。
+        %       - 使用 sltest.testsequence.editSymbol 进行符号属性更新。
+
+            arguments
+                opts.block = '';
+            end
+
+            block = opts.block;
+            block = mySlxOp.checkBlock();
+    
+            allSymbols.Path = {};
+            allSymbols.Symbols = {};
+            for i = 1:length(block)
+                thisBlock = block{i};
+                isTestSequence = mySlxOp.isTestSequence(thisBlock);
+                if ~isTestSequence
+                    continue;
+                end
+                try
+                    Symbols = sltest.testsequence.findSymbol(thisBlock.getFullName());
+                    Symbols = Symbols(:);
+                    Path = repmat({thisBlock.getFullName()}, length(Symbols), 1);
+                    allSymbols.Path = [allSymbols.Path; Path];
+                    allSymbols.Symbols = [allSymbols.Symbols; Symbols];
+                catch
+                    continue;
+                end
+            end
+            
+            for i = 1:length(allSymbols.Path)
+                Path = allSymbols.Path{i};
+                Symbol = allSymbols.Symbols{i};
+                % 将数据类型设置为 "Inherit" (如果 Scope 是 "Input" 或 "Output")
+                symbolObj = sltest.testsequence.readSymbol(Path, Symbol);
+                if (symbolObj.Scope == "Input" || symbolObj.Scope == "Output")
+                    try
+                        sltest.testsequence.editSymbol(Path, Symbol, "DataType", "Inherit: Same as Simulink");
+                    catch
+                    end
+                end
+            end
+        end
 
 
 
@@ -1918,6 +2473,37 @@ classdef mySlxOp
         end
 
 
+        function sigList = getLineSignalHierarchy(opts)
+        % 获取选中的信号线的信号层次结构
+            arguments
+                opts.line = '';
+            end
+            line = mySlxOp.checkLine(opts.line);
+            
+            sigList = cell(0);
+            for i = 1:length(line)
+                thisLine = line{i};
+                % 获取线的源端口
+                srcPort = thisLine.SrcPortHandle;
+                if isempty(srcPort)
+                    continue;
+                end
+                % 获取源端口的信号层次结构
+                srcPort = mySlxOp.checkBlock(srcPort);
+                srcPort = srcPort{1};
+                signalHierarchy = srcPort.SignalHierarchy;
+                if isempty(signalHierarchy)
+                    continue;
+                end
+                sigListTemp = mySlxOp.parseSignalHierarchy(signalHierarchy);
+                if isempty(sigListTemp) || strcmp(sigListTemp, '')
+                    sigListTemp = srcPort.Name;
+                end
+                sigList = [sigList; sigListTemp];
+            end
+        end
+
+
         function sigList = getBlockSignalHierarchy(opts)
             
             arguments
@@ -1927,7 +2513,7 @@ classdef mySlxOp
             end
 
             block = opts.block;
-            direction = opts.direction;
+            direction = opts.kind;
             isUsed = opts.isUsed;
 
             block = mySlxOp.checkBlock(block);
@@ -2031,7 +2617,7 @@ classdef mySlxOp
             end
 
             block = opts.block;
-            direction = opts.direction;
+            direction = opts.kind;
             portNum = opts.portNum;
 
             block = mySlxOp.checkBlock(block);
@@ -2545,6 +3131,106 @@ classdef mySlxOp
             % 获取ZinSight文件夹的路径
             path = currentPath(1:index-2);
         end
+    %% 仿真数据提取函数
+        function data = simOutGet(opts)
+            % simOutGet 从仿真输出中提取变量
+            % varName: 变量名
+
+            arguments
+                opts.simOut = [];
+                opts.varName (1,1) string = "";
+            end
+            simOut = opts.simOut;
+            varName = opts.varName;
+            if isempty(simOut)
+                try
+                    simOut = evalin('base', 'out');
+                catch
+                    error("基础工作区没有变量: out. 请确保仿真输出变量名为out");
+                end
+            end
+            if ~isprop(simOut, "logsout")
+                error("仿真没有设置数据记录");
+            end
+            logsout = simOut.logsout;
+            for i = 1:numel(logsout)
+                thisSignal = logsout{i};
+                if strcmp(thisSignal.Name, varName)
+                    data.time = thisSignal.Values.Time;
+                    data.data = thisSignal.Values.Data;
+                    data.name = thisSignal.Name;
+                    return;
+                end
+            end
+        end
+
+
+
+
+    %% 单元测试和静态代码扫描相关
+
+        % 规范化
+        function unitTest_normalizeMatlabFunction_portSettings(opts)
+
+            arguments
+                opts.block = '';
+            end
+            opts.block = mySlxOp.checkBlock(opts.block);
+
+            % 在选中的模块中查找Matlab Function模块
+            blocks = cell(0);
+            for i = 1:length(opts.block)
+                thisBlock = opts.block{i};
+                searchBlocks = find_system(thisBlock.Handle, 'BlockType', 'SubSystem');
+                for j = 1:length(searchBlocks)
+                    thisSearchBlock = searchBlocks(j);
+                    thisSearchBlock = mySlxOp.checkBlock(thisSearchBlock);
+                    if mySlxOp.isMatlabFunction(thisSearchBlock)
+                        blocks = [blocks; thisSearchBlock];
+                    end
+                end
+            end
+
+            % 找到Matlab Function模块后, 规范化其端口设置
+            for i = 1:length(blocks)
+                % 找到Matlab Function模块的端口设置
+                thisBlock = blocks{i};
+
+                % MATLAB Function block 是一个 Stateflow.EMChart
+                chart = get_param(thisBlock.Handle, 'Object');  
+
+                % 遍历其 Data 对象 (Inport/Outport 都在这里)
+                dataObjs = chart.find('-isa', 'Stateflow.Data');
+                
+                for d = 1:length(dataObjs)
+                    dataObj = dataObjs(d);
+
+                    if ismember(dataObj.Scope, {'Input','Output'})
+
+                        % 获取端口号
+                        portNum = dataObj.Port;
+
+                        % 获取端口连接的线
+                        line = mySlxOp.getBlockPortLines('block', thisBlock, 'portType', lower(dataObj.Scope), 'portNum', portNum);
+                        if isempty(line)
+                            continue;
+                        end
+                        % 获取线的数据类型
+                        lineDataType = mySlxOp.getLineDataType('line', line);
+
+                        % 修改数据类型
+                        dataObj.DataType = lineDataType{1};
+
+                        % 修改实/复性
+                        dataObj.Props.Complexity = 'Off';
+
+                        fprintf('Updated %s.%s: Type=%s, Complexity=%s\n', ...
+                                chart.Name, dataObj.Name, ...
+                                dataObj.DataType, dataObj.Props.Complexity);
+                    end
+                end
+            end
+        end
 
     end
 
@@ -2764,6 +3450,23 @@ classdef mySlxOp
             end
             if all(cell2mat(temp))
                 isSubsystem = true;
+            end
+        end
+
+        function isTestSequence = isTestSequence(block)
+            block = mySlxOp.parseBlock(block);
+            isTestSequence = false;
+            temp = mat2cell(false(length(block), 1), ones(1, numel(block)));
+            for i = 1:length(block)
+                thisBlock = block{i};
+                try
+                    sltest.testsequence.findSymbol(thisBlock.getFullName());
+                    temp{i} = true;
+                catch
+                end
+            end
+            if all(cell2mat(temp))
+                isTestSequence = true;
             end
         end
 
