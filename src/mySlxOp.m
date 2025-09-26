@@ -664,7 +664,7 @@ classdef mySlxOp
             line = mySlxOp.checkLine(line);
 
             if isParamAdd
-                mySlxOp.logAllLine("onlyRead", true);
+                mySlxOp.line_logAllLine("onlyRead", true);
             end
 
             for i = 1:length(line)
@@ -737,7 +737,7 @@ classdef mySlxOp
                             if isParamAdd
                                 % 从基础工作区中查看是否parName存在
                                 if evalin('base', ['exist(''', parName, ''', ''var'')']) == 0
-                                    dataType = mySlxOp.getLineDataType('line', thisLine);
+                                    dataType = mySlxOp.line_getLineDataType('line', thisLine);
                                     dataType = dataType{1};
                                     if strcmp(dataType, 'Error')
                                         dataType = 'double';
@@ -1170,7 +1170,7 @@ classdef mySlxOp
 
 
         %% 信号线的相关功能
-        function transLineName(opts)
+        function line_transLineName(opts)
         % 将一个block的输入信号线的名字转换为输出信号线的名字, 或者反之
             arguments
                 opts.block = '';
@@ -1208,7 +1208,7 @@ classdef mySlxOp
         end
 
 
-        function [lineNames, lineDataTypes] = getObsSigofSys(opts)
+        function [lineNames, lineDataTypes] = line_getObsSigofSys(opts)
 
             arguments
                 opts.block = '';
@@ -1269,7 +1269,7 @@ classdef mySlxOp
         end
 
 
-        function createSelectedSig(opts)
+        function line_createSelectedSig(opts)
         % 创建选中的信号线的标准信号
             arguments
                 opts.checkDataType = true;
@@ -1283,7 +1283,7 @@ classdef mySlxOp
             end
 
             if checkDataType
-                lineDataType = mySlxOp.getLineDataType('line', line);
+                lineDataType = mySlxOp.line_getLineDataType('line', line);
                 for i = 1:length(line)
                     thisLine = line{i};
                     sigName = get_param(thisLine.Handle, 'Name');
@@ -1301,7 +1301,7 @@ classdef mySlxOp
         end
 
         
-        function deleteSelectedSig(opts)
+        function line_deleteSelectedSig(opts)
 
         %   删除选中的信号线
             arguments
@@ -1328,7 +1328,7 @@ classdef mySlxOp
         end
 
 
-        function getSelectedLineName(opts)
+        function line_getSelectedLineName(opts)
         %   获取选中的线的名字
             arguments
                 opts.line = '';
@@ -1350,7 +1350,7 @@ classdef mySlxOp
         end
 
         
-        function appendSelectedLineName(opts)
+        function line_appendSelectedLineName(opts)
         %  给选中的信号线的名字添加后缀
             arguments
                 opts.line = '';
@@ -1387,7 +1387,7 @@ classdef mySlxOp
         end
 
 
-        function allLineOut = logAllLine(opts)
+        function allLineOut = line_logAllLine(opts)
             
             arguments
                 opts.onlyRead = false;
@@ -1414,7 +1414,7 @@ classdef mySlxOp
             allLines = find_system(topModelPath, 'FindAll', 'on', 'type', 'line');
             allLines = mySlxOp.checkLine(allLines);
 
-            fullId = mySlxOp.getLineFullId('line', allLines);
+            fullId = mySlxOp.line_getLineFullId('line', allLines);
 
             % 创建仿真器
             % simModel = simulation(topModelPath);
@@ -1461,7 +1461,7 @@ classdef mySlxOp
         end
 
 
-        function fullId = getLineFullId(opts)
+        function fullId = line_getLineFullId(opts)
 
             arguments
                 opts.line = '';
@@ -1488,7 +1488,7 @@ classdef mySlxOp
         end
 
 
-        function [lineDataType] = getLineDataType(opts)
+        function [lineDataType] = line_getLineDataType(opts)
 
             arguments
                 opts.line = '';
@@ -1501,17 +1501,17 @@ classdef mySlxOp
             if isempty(line)
                 return;
             end
-            allLine = mySlxOp.logAllLine('onlyRead', true);
-            lineFullId = mySlxOp.getLineFullId('line', line);
+            allLine = mySlxOp.line_logAllLine('onlyRead', true);
+            lineFullId = mySlxOp.line_getLineFullId('line', line);
 
             % 检查allLine是否包含全部的lineFullId
-            isOk = mySlxOp.checkAllLineLog('line', line);
+            isOk = mySlxOp.line_checkAllLineLog('line', line);
             if ~isOk
-                allLine = mySlxOp.logAllLine('onlyRead', false);
+                allLine = mySlxOp.line_logAllLine('onlyRead', false);
             end
-            isOk = mySlxOp.checkAllLineLog('line', line);
+            isOk = mySlxOp.line_checkAllLineLog('line', line);
             if ~isOk
-                error(append("Error [getLineDataType]: there is a line not in allLineLog, please run mySlxOp.logAllLine() and check."));
+                error(append("Error [line_getLineDataType]: there is a line not in allLineLog, please run mySlxOp.line_logAllLine() and check."));
             end
 
             lineDataType = cell(length(line), 1);
@@ -1526,7 +1526,7 @@ classdef mySlxOp
 
 
         % 检测allLineLog是否包含所需的line
-        function isOk = checkAllLineLog(opts)
+        function isOk = line_checkAllLineLog(opts)
 
             arguments
                 opts.line = '';
@@ -1540,8 +1540,8 @@ classdef mySlxOp
                 return;
             end
 
-            allLine = mySlxOp.logAllLine('onlyRead', true);
-            lineFullId = mySlxOp.getLineFullId('line', line);
+            allLine = mySlxOp.line_logAllLine('onlyRead', true);
+            lineFullId = mySlxOp.line_getLineFullId('line', line);
 
             isOk = true;
             for i = 1:length(line)
@@ -1554,10 +1554,10 @@ classdef mySlxOp
             end
         end
 
-        % lineFixName
-        function lineFixName(opts)
-        % LINEFIXNAME  修正信号线名称中的非法字符
-        %   lineFixName(OPTIONS) 遍历指定的 Simulink 信号线句柄
+        % line_fixName
+        function line_fixName(opts)
+        % line_fixName  修正信号线名称中的非法字符
+        %   line_fixName(OPTIONS) 遍历指定的 Simulink 信号线句柄
 
             arguments
                 opts.line = '';
@@ -2364,8 +2364,6 @@ classdef mySlxOp
 
 
 
-
-
         %% Inca报文数据处理函数
 
         function varData = mdfDataGet(varName, filePath)
@@ -2373,7 +2371,8 @@ classdef mySlxOp
             mdfData = mySlxOp.readMyMdfData(filePath);
         
             for i = 1:length(mdfData)
-                thisTableVarName = mdfData{i}.Properties.VariableNames;
+                thisMdfData = mdfData{i};
+                thisTableVarName = thisMdfData.Properties.VariableNames;
                 thisTableVarName = thisTableVarName(:);
                 thisTableVarName = string(thisTableVarName);
                 % 查看是否包含变量名
@@ -2388,7 +2387,6 @@ classdef mySlxOp
                 end
             end
         end
-
         
         function out = rtgDataGet(varName, filePath)
             if ~exist('varName', 'var') || isempty(varName)
@@ -2443,6 +2441,76 @@ classdef mySlxOp
                 out.varName = varName;
             else
                 error("文件不存在: %s", filePath);
+            end
+        end
+
+        function varDatas = mdf_dataGet(opts)
+            
+            arguments
+                opts.filePath = '';
+                opts.varNames = '';
+            end
+            
+            filePath = opts.filePath;
+            varNames = opts.varNames;
+
+            if isempty(filePath)
+                [filename, pathname] = uigetfile({'*.mdf;*.dat;*.mf4', 'MDF文件 (*.mdf, *.dat, *.mf4)'; '*.*', '所有文件 (*.*)'}, '选择MDF文件');
+                if isequal(filename, 0)
+                    disp('用户取消了选择');
+                    varDatas = [];
+                    return;
+                end
+                filePath = fullfile(pathname, filename);
+            end
+            mdfData = mySlxOp.readMyMdfData(filePath);
+            mdfDataInfo = mdfInfo(filePath);
+            mdfStartTime = posixtime(mdfDataInfo.InitialTimestamp);
+
+            varDatas = [];
+            if isempty(varNames)
+                for i = 1:length(mdfData)
+                    thisMdfData = mdfData{i};
+                    thisTableVarName = thisMdfData.Properties.VariableNames;
+                    thisTableVarName = thisTableVarName(:);
+                    thisTableVarName = string(thisTableVarName);
+                    for j = 1:length(thisTableVarName)
+                        varData.name = thisTableVarName{j};
+                        varData.data = mdfData{i}.(varData.name);
+                        timeAxisName = mdfData{i}.Properties.DimensionNames{1};
+                        varData.time = mdfData{i}.(timeAxisName);
+                        varData.time = seconds(varData.time);
+                        varData.startTime = mdfStartTime;
+                        varDatas = [varDatas; varData];
+                    end
+                end
+            else
+                for i = 1:length(varNames)
+                    varName = varNames{i};
+                    isGet = false;
+                    % 遍历mdfData, 查找变量
+                    for j = 1:length(mdfData)
+                        thisMdfData = mdfData{j};
+                        thisTableVarName = thisMdfData.Properties.VariableNames;
+                        thisTableVarName = thisTableVarName(:);
+                        thisTableVarName = string(thisTableVarName);
+                        % 查看是否包含变量名
+                        if any(contains(thisTableVarName, varName))
+                            % 如果包含，则返回该变量的数据
+                            varData.name = varName;
+                            varData.data = mdfData{j}.(varName);
+                            timeAxisName = mdfData{j}.Properties.DimensionNames{1};
+                            varData.time = mdfData{j}.(timeAxisName);
+                            varData.time = seconds(varData.time);
+                            varData.startTime = mdfStartTime;
+                            varDatas = [varDatas; varData];
+                            isGet = true;
+                        end
+                        if isGet
+                            break;
+                        end
+                    end
+                end
             end
         end
 
@@ -2858,12 +2926,12 @@ classdef mySlxOp
 
         %% block 属性相关功能
 
-        function blockPropReplace(opts)
-        % blockPropReplace 替换选中模块的属性中的文本
+        function block_propReplace(opts)
+        % block_propReplace 替换选中模块的属性中的文本
         % 
         % 小心使用, 可能会替换掉意料之外的文本, 注意输出信息
         % 
-        % blockPropReplace(opts)
+        % block_propReplace(opts)
             % opts: 结构体, 包含以下字段:
             %   block: 模块路径, 默认为当前选中的模块
             %   searchText: 搜索文本, 默认为空
@@ -3216,7 +3284,7 @@ classdef mySlxOp
                             continue;
                         end
                         % 获取线的数据类型
-                        lineDataType = mySlxOp.getLineDataType('line', line);
+                        lineDataType = mySlxOp.line_getLineDataType('line', line);
 
                         % 修改数据类型
                         dataObj.DataType = lineDataType{1};
