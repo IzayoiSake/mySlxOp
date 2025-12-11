@@ -33,14 +33,20 @@ function save_Mat(opts)
         error("临时.m文件创建失败: %s", tempNamePath);
     end
     try
-        matlabExe = findMatlab(version="R2023b");
-        matlabExe = append(matlabExe, '.exe');
-        disp(append("正在使用Cmd运行Matlab"));
-        cmd = append('"', matlabExe, '"', ' -nosplash -nodesktop -wait -r "run(''', tempNamePath, '''); save(''', opts.filePath, '''); exit;"');
-        [status, cmdout] = system(cmd);
-        if status ~= 0
-            error("Cmd运行Matlab失败: %s", cmdout);
-        end
+        % matlabExe = findMatlab(version="R2023b");
+        % matlabExe = append(matlabExe, '.exe');
+        % disp(append("正在使用Cmd运行Matlab"));
+        % cmd = append('"', matlabExe, '"', ' -nosplash -nodesktop -wait -r "run(''', tempNamePath, '''); save(''', opts.filePath, '''); exit;"');
+        % cmd = append('"', matlabExe, '"', ' -batch -wait "run(''', tempNamePath, '''); save(''', opts.filePath, '''); exit;"');
+        % [status, cmdout] = system(cmd);
+        % if status ~= 0
+        %     error("Cmd运行Matlab失败: %s", cmdout);
+        % end
+        disp(append("正在使用COM服务器运行Matlab"));
+        h = myOp.comServer.getMatlabComServer();
+        cmd = append("run('", tempNamePath, "'); ");
+        cmd = append(cmd, "save('", opts.filePath, "'); ");
+        h.Execute(cmd);
     catch ME
         disp("Matlab调用失败");
         delete(tempNamePath);

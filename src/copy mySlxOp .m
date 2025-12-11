@@ -103,7 +103,7 @@ classdef mySlxOp
 
             arguments
                 opts.block = '';
-                opts.portType string = "";
+                opts.portType string {mustBeMember(opts.portType, {"inport", "outport", ""})} = "";
                 opts.portNum double {mustBeInteger} = 0;
             end
 
@@ -1178,7 +1178,7 @@ classdef mySlxOp
             end
 
             block = opts.block;
-            direction = opts.kind;
+            direction = opts.direction;
 
             block = mySlxOp.checkBlock(block);
 
@@ -1931,12 +1931,12 @@ classdef mySlxOp
 
                 % 获取当前全部的 symbol 名称
                 existingSymbols = sltest.testsequence.findSymbol(thisBlock.getFullName());
-
+                existingSymbols = existingSymbols(:);
                 for j = 1:length(symbolNames)
                     thisSymbolName = symbolNames{j};
                     % 检查 symbol 是否已存在
                     if ~isempty(existingSymbols)
-                        if any(strcmp({existingSymbols.Name}, thisSymbolName))
+                        if any(strcmp(string(existingSymbols), thisSymbolName))
                             continue;
                         end
                     end
@@ -1945,6 +1945,95 @@ classdef mySlxOp
                 end
             end
         end
+
+
+        function testSequence_flushSymbolByLineName(opts)
+        % TESTSEQUENCE_FLUSHSYMBOLBYLINENAME  根据连接线名称向 Test Sequence 模块刷新符号
+        %
+        %   testSequence_flushSymbolByLineName(opts) 会检查指定的 Test Sequence 模块，
+        %   根据输入的连接线对象名称自动在模块中对应的端口刷新相应的符号。
+        %
+        %   输入参数 (opts 结构体):
+        %       opts.block   - Test Sequence 模块句柄或路径 (字符串或 cell 数组)
+        %       opts.line    - Simulink 连接线对象 (字符串或 cell 数组)
+        %       opts.scope   - 符号作用域 (可选)，必须是以下之一：
+        %                         'Input' | 'Output' | 'Local' | ...
+        %                         'Constant' | 'Parameter' | 'Data Store Memory'
+        %                      默认值为 'Input'。
+        %
+        %   示例:
+        %       testSequence_flushSymbolByLineName( ...
+        %           block = gcb, ...
+        %           line = get_param(gcl,'LineHandles'), ...
+        %           scope = 'Input');
+        %
+        %   说明:
+        %       - 如果指定的 block 不是 Test Sequence 模块，则跳过。
+        %       - 如果 line 没有名称，则不会生成符号。
+
+            arguments
+                opts.block = '';
+                opts.line = '';
+                opts.scope {mustBeTextScalar} = "Input";
+            end
+
+            opts.scope = string(opts.scope);
+            mustBeMember(opts.scope, ["Input";"Output";"Local";"Constant";"Parameter";"Data Store Memory"]);
+
+            block = opts.block;
+            line = opts.line;
+            scope = opts.scope;
+            
+            block = mySlxOp.checkBlock(block);
+            line = mySlxOp.checkLine(line);
+
+            if isempty(block) || isempty(line)
+                return;
+            end
+
+            line = mySlxOp.line_sortByPosition('line', line);
+            lineNames = [];
+            for i = 1:length(line)
+                thisLine = line{i};
+                thisLineName = get_param(thisLine.Handle, 'Name');
+                thisLineName = string(thisLineName);
+                if ~isempty(thisLineName)
+                    lineNames = [lineNames; thisLineName];
+                end
+            end
+
+            % 检查 block 是否为 TestSequence 模块
+            symbolNames = lineNames;
+            for i = 1:length(block)
+                thisBlock = block{i};
+                isTestSequence = mySlxOp.isTestSequence(thisBlock);
+                if ~isTestSequence
+                    continue;
+                end
+
+                % 获取当前全部的 symbol 名称
+                existingSymbols = sltest.testsequence.findSymbol(thisBlock.getFullName());
+                existingSymbols = existingSymbols(:);
+                existingSymbols = cellfun(...
+                    @(x) sltest.testsequence.readSymbol(thisBlock.getFullName(), x), existingSymbols, 'UniformOutput', false...
+                );
+                for j = 1:length(symbolNames)
+                    thisSymbolName = symbolNames{j};
+                    if length(existingSymbols) < j
+                        sltest.testsequence.addSymbol(thisBlock.getFullName(), thisSymbolName, 'Data', scope);
+                    else
+                        thisExistingSymbol = existingSymbols{j};
+                        % 修改 symbol 的名字
+                        sltest.testsequence.editSymbol(...
+                            thisBlock.getFullName(), thisExistingSymbol.Name, ...
+                            'Name', thisSymbolName ...
+                        );
+                    end
+                end
+            end
+        end
+
+
 
         function testSequence_setSymbolDataType(opts)
         % TESTSEQUENCE_SETSYMBOLDATATYPE  将 Test Sequence 模块中符号的数据类型设置为 "Inherit: Same as Simulink"
@@ -2541,7 +2630,7 @@ classdef mySlxOp
         end
 
 
-        function sigList = getLineSignalHierarchy(opts)
+        function sigList = sigHcy_getLineSignalHierarchy(opts)
         % 获取选中的信号线的信号层次结构
             arguments
                 opts.line = '';
@@ -2572,16 +2661,18 @@ classdef mySlxOp
         end
 
 
-        function sigList = getBlockSignalHierarchy(opts)
+        function sigList = sigHcy_getBlockSignalHierarchy(opts)
             
             arguments
                 opts.block = '';
-                opts.direction = '';
+                opts.direction {mustBeMember(opts.direction, {'in'; 'out'; 'all'; ''})} = '';
+                opts.portNum = '';
                 opts.isUsed = false;
             end
 
             block = opts.block;
-            direction = opts.kind;
+            direction = opts.direction;
+            portNum = opts.portNum;
             isUsed = opts.isUsed;
 
             block = mySlxOp.checkBlock(block);
@@ -2608,6 +2699,13 @@ classdef mySlxOp
                     port = outports;
                 else
                     port = [inports; outports];
+                end
+                port = port(:);
+                if ~isempty(portNum)
+                    if portNum > length(port)
+                        error('端口号超出模块实际端口数量');
+                    end
+                    port = port(portNum);
                 end
                 port = mySlxOp.checkBlock(port);
 
@@ -2676,17 +2774,19 @@ classdef mySlxOp
         end
 
 
-        function allSigList = listSubSystemPortSignalHierarchy(opts)
+        function allSigList = sigHcy_getSubSystemPortSignalHierarchy(opts)
 
             arguments
                 opts.block = '';
-                opts.direction = '';
+                opts.direction {mustBeMember(opts.direction, {'in'; 'out'; 'all'; ''})} = '';
                 opts.portNum = '';
+                opts.isUsed = false;
             end
 
             block = opts.block;
-            direction = opts.kind;
+            direction = opts.direction;
             portNum = opts.portNum;
+            isUsed = opts.isUsed;
 
             block = mySlxOp.checkBlock(block);
 
@@ -2732,7 +2832,7 @@ classdef mySlxOp
                 for j = 1:length(port)
                     thisPort = port{j};
                     disp(thisPort.Name);
-                    sigList = mySlxOp.getBlockSignalHierarchy('block', thisPort);
+                    sigList = mySlxOp.sigHcy_getBlockSignalHierarchy('block', thisPort);
                     disp(sigList);
                     allSigList = [allSigList; sigList];
                 end
@@ -2924,7 +3024,7 @@ classdef mySlxOp
 
 
 
-        %% block 属性相关功能
+        %% block 通用功能
 
         function block_propReplace(opts)
         % block_propReplace 替换选中模块的属性中的文本
@@ -2977,6 +3077,33 @@ classdef mySlxOp
         end
 
 
+        function block_checkIfSignalUsed(opts)
+        % block_checkIfSignalUsed 检查选中的模块, 是否信号名对应的信号被使用
+        % 如果信号被使用, 则返回 true, 否则返回 false
+        %
+        % block_checkIfSignalUsed(opts)
+            % opts: 结构体, 包含以下字段:
+            %   block: 模块路径, 默认为当前选中的模块
+            %   direction: 'in' | 'out' | 'all', 默认为 'all'
+            %   portNum: 端口号, 默认为空, 即检查所有端口
+            %   isUsed: 是否只返回被使用的信号, 默认为 false
+
+            arguments
+                opts.block = '';
+                opts.signalName = '';
+            end
+            
+            block = opts.block;
+
+            block = mySlxOp.checkBlock(block);
+
+            for i = 1:length(block)
+                thisBlock = block{i};
+                searchObjects = find_system(bdroot, 'FindAll', 'on', 'Type', 'Block');
+            end
+
+
+        end
 
         %% 画图专用函数
         function betterFig()
