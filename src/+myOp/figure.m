@@ -25,6 +25,7 @@ classdef figure
             set(get(ax, 'Legend'), 'FontSize', 16);
             
             set(ax, 'Box', 'on'); % 显示边框
+            grid(ax, 'on'); % 显示网格
             
             % 获取ax的所属tlo
             tlo = ancestor(ax, 'tiledchartlayout');
@@ -33,7 +34,7 @@ classdef figure
                 tlo.Padding = 'compact';
                 % 设置标题字体大小
                 set(get(tlo, 'Title'), 'FontSize', 24);
-                set(tlo, 'Grid', 'on'); % 显示网格
+                % set(tlo, 'Grid', 'on'); % 显示网格
             end
             
             % 窗口最大化
@@ -568,5 +569,39 @@ classdef figure
             end
         end
     
+
+        function out = tsOutliersFix(ts, method)
+        % TSOUTLIERSFIX - Fix outliers in a timeseries using specified method.
+            arguments
+                ts timeseries
+                method {mustBeMember(method, ["linear";"spline";"pchip";"nearest";"movmedian"])} = "movmedian"
+            end
+
+            data = ts.Data;
+            time = ts.Time;
+
+            % 检测异常值
+            outlierIdx = isoutlier(data, "movmedian", length(data)/10);
+
+            % 修正异常值
+            if any(outlierIdx)
+                if method == "movmedian"
+                    fixedData = data;
+                    thisMovmedian = movmedian(data, 5, 'omitnan');
+                    fixedData(outlierIdx) = thisMovmedian(outlierIdx);
+                else
+                    fixedData = data;
+                    fixedData(outlierIdx) = interp1( ...
+                        time(~outlierIdx), data(~outlierIdx), ...
+                        time(outlierIdx), method, 'extrap');
+                end
+            else
+                fixedData = data;
+            end
+
+            out = timeseries(fixedData, time);
+        end
+
+        
     end
 end

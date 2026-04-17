@@ -104,7 +104,7 @@ classdef line
             end
 
             if checkDataType
-                lineDataType = myOp.slx.line.line_getLineDataType('line', line);
+                lineDataType = myOp.slx.line.getLineDataType('line', line);
                 for i = 1:length(line)
                     thisLine = line{i};
                     sigName = get_param(thisLine.Handle, 'Name');
@@ -149,7 +149,45 @@ classdef line
         end
 
 
-        function line_getSelectedLineName(opts)
+        function deleteSelectedSig(opts)
+        %   删除选中的信号线
+            arguments
+                opts.line = '';
+                opts.block = '';
+                opts.scope {mustBeMember(opts.scope, ["Selected"; "SelectedAll"])} = 'Selected';
+            end
+
+            line = opts.line;
+            if isequal(opts.scope, "Selected")
+                line = myOp.slx.general.checkLine(line);
+            elseif isequal(opts.scope, "SelectedAll")
+                line = myOp.slx.line.getAll('line', line, 'block', opts.block);
+            end
+            
+
+            if isempty(line)
+                return;
+            end
+
+            for i = 1:length(line)
+                thisLine = line{i};
+                sigName = get_param(thisLine.Handle, 'Name');
+                if thisLine.MustResolveToSignalObject == true
+                    try
+                        evalin('base', ['clear ', sigName]);
+                    catch
+                    end
+                    thisLine.MustResolveToSignalObject = false;
+                    thisLineId = myOp.slx.line.getLineFullId('line', thisLine);
+                    msg = myhiliteCmd(thisLineId{1}, thisLineId{1});
+                    msg = append("⚠️ 已删除信号线 ", msg, " 的信号。");
+                    disp(msg);
+                end
+            end
+        end
+
+
+        function names = getLineName(opts)
         %   获取选中的线的名字
             arguments
                 opts.line = '';
@@ -162,11 +200,31 @@ classdef line
             if isempty(line)
                 return;
             end
-            line = myOp.slx.line.line_sortByPosition('line', line);
+            % line = myOp.slx.line.line_sortByPosition('line', line);
+            names = cell(length(line), 1);
             for i = 1:length(line)
                 thisLine = line{i};
                 sigName = get_param(thisLine.Handle, 'Name');
-                disp(sigName);
+                names{i} = sigName;
+            end
+
+            if nargout == 0
+                % 显示超链接
+                msg = "✨ 选中的信号线名称如下:\n";
+                for i = 1:length(names)
+                    thisName = names{i};
+                    thisPath = getfullname(line{i}.Handle);
+                    if isequal(thisName, "")
+                        thisName = "(无名称)";
+                    end
+                    thisLinePath = myOp.slx.line.getLineFullId("line", line{i});
+                    thisLinePath = thisLinePath{1};
+                    cmdPath = strrep(thisLinePath, newline, ''' newline ''');
+                    newMsg = sprintf('🔗 <a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, thisName);
+                    msg = append(msg, newMsg, "\n");
+                end
+                fprintf(msg);
+                clear names;
             end
         end
 
@@ -214,94 +272,19 @@ classdef line
                 opts.onlyRead = false;
             end
 
-            onlyRead = opts.onlyRead;
-
-            persistent allLine;
-
-            if isempty(allLine)
-                onlyRead = false;
-            end
-
-            if onlyRead
-                allLineOut = allLine;
-                return;
-            end
-
-            % 获取当前顶层模型
-            topModelPath = bdroot;
-            topModelPath = getfullname(topModelPath);
-
-            % 获取当前模型的所有线
-            allLines = find_system(topModelPath, 'FindAll', 'on', 'type', 'line');
-            allLines = myOp.slx.general.checkLine(allLines);
-
-            fullId = myOp.slx.line.line_getLineFullId('line', allLines);
-
-            % 创建仿真器
-            % simModel = simulation(topModelPath);
-            % 查看顶层模型是否已经被其他程序(函数)运行处于仿真状态
-            isOtherSiming = true;
-            simStatus = get_param(topModelPath, 'SimulationStatus');
-            if strcmp(simStatus, 'stopped')
-                isOtherSiming = false;
-                warning('off', 'all');
-                set_param(topModelPath, 'SimulationCommand', 'start');
-                set_param(topModelPath, 'SimulationCommand', 'pause');
-                warning('on', 'all');
-            end
-
-            lineDataType = cell(length(allLines), 1);
-            lineDimensions = cell(length(allLines), 1);
-
-            for i = 1:length(allLines)
-                thisLine = allLines{i};
-                % 获取线的数据类型
-                try
-                    srcPort = thisLine.getSourcePort();
-
-                    dataType = srcPort.CompiledPortDataType;
-                    % 检查 dataType 是否是一个 Simulink.Bus类型
-                    if (myOp.slx.priTools.isSimulinkBusType(dataType))
-                        dataType = append("Bus:", dataType);
-                    end
-                    % 检查 dataType 是否是一个 枚举类型
-                    if (myOp.slx.priTools.isSimulinkEnumType(dataType))
-                        dataType = append("Enum:", dataType);
-                    end
-                    lineDataType{i} = dataType;
-                catch
-                    lineDataType{i} = '';
-                end
-                % 获取线的维度
-                try
-                    srcPort = thisLine.getSourcePort();
-                    dimensions = srcPort.CompiledPortDimensions;
-                    dimensions = dimensions(2:end);
-                    lineDimensions{i} = dimensions;
-                catch
-                    lineDimensions{i} = [];
-                end
-            end
-
-            if ~isOtherSiming
-                % 关闭仿真器
-                set_param(topModelPath, 'SimulationCommand', 'stop');
-            end
-
-            % 清除基础工作区中的变量"out"
-            evalin('base', 'clear out');
-
-            allLine.dataType = lineDataType;
-            allLine.dimensions = lineDimensions;
-            allLine.fullId = fullId;
-            allLineOut = allLine;
+            allThing = myOp.slx.simLog.logAll('onlyRead', opts.onlyRead);
+            allLineOut = allThing.line;
         end
 
 
-        function fullId = line_getLineFullId(opts)
+        function varargout = getLineFullId(opts)
 
             arguments
                 opts.line = '';
+            end
+
+            for i = 1:nargout
+                varargout{i} = [];
             end
 
             line = opts.line;
@@ -317,15 +300,187 @@ classdef line
             for i = 1:length(line)
                 thisLine = line{i};
                 parentPath = get_param(thisLine.Handle, 'Parent');
-                sourcePort = thisLine.SourcePort;
+                srcPort = get_param(thisLine.Handle, 'SrcPortHandle');
+                dstPort = get_param(thisLine.Handle, 'DstPortHandle');
+                if ~isequal(srcPort, -1)
+                    port = srcPort;
+                    portType = 'out';
+                elseif ~isequal(dstPort, -1)
+                    port = dstPort(1);
+                    portType = 'in';
+                else
+                    port = -1;
+                    portType = '';
+                end
+                if port == -1
+                    msg = sprintf('<a href="matlab:myhilite([%.64g])">%s</a>', thisLine.Handle, parentPath);
+                    msg = append("错误: 该信号线 ", msg, " 没有连接到任何端口, 因此无效.");
+                    error(msg);
+                end
+                block = get_param(port, 'Parent');
+                portNum = get_param(port, 'PortNumber');
+                blockName = get_param(block, 'Name');
+                blockPath = get_param(block, 'Parent');
 
-                fullId{i} = append(parentPath, '/', sourcePort);
+                fullId{i} = append(blockPath, '/', blockName, ':', portType, ':', num2str(portNum));
             end
             fullId = fullId(:);
+            if nargout == 1
+                varargout{1} = fullId;
+            elseif nargout == 2
+                msgAll = [];
+                for i = 1:length(line)
+                    thisLine = line{i};
+                    thisFullId = fullId{i};
+                    cmdPath = strrep(thisFullId, newline, ''' newline ''');
+                    msg = sprintf('<a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, thisFullId);
+                    msg = append("⭐ 信号线完整id: ", msg);
+                    idx = sprintf('<a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, string(i));
+                    msg = append(idx, ". ", msg);
+                    msgAll = append(msgAll, msg, "\n");
+                end
+                varargout{1} = fullId;
+                varargout{2} = msgAll;
+            else
+                for i = 1:length(line)
+                    thisLine = line{i};
+                    thisFullId = fullId{i};
+                    cmdPath = strrep(thisFullId, newline, ''' newline ''');
+                    msg = sprintf('<a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, thisFullId);
+                    msg = append("⭐ 信号线完整id: ", msg);
+                    idx = sprintf('<a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, string(i));
+                    msg = append(idx, ". ", msg);
+                    disp(msg);
+                end
+            end
         end
 
 
-        function [lineDataType] = line_getLineDataType(opts)
+        function varargout = getLinePath(opts)
+            arguments
+                opts.line = '';
+            end
+
+            for i = 1:nargout
+                varargout{i} = [];
+            end
+
+            line = opts.line;
+
+            line = myOp.slx.general.checkLine(line);
+            if isempty(line)
+                return;
+            end
+            lineId = myOp.slx.line.getLineFullId('line', line);
+
+            linePath = cell(length(line), 1);
+
+            for i = 1:length(line)
+                thisLine = line{i};
+                thisLineId = lineId{i};
+                lineName = get_param(thisLine.Handle, 'Name');
+                if ~isequal(lineName, "")
+                    linePath{i} = append(lineName, ':', thisLineId);
+                else
+                    linePath{i} = thisLineId;
+                end
+            end
+            if nargout == 1
+                varargout{1} = linePath;
+            elseif nargout == 2
+                msgAll = [];
+                for i = 1:length(line)
+                    thisLineId = lineId{i};
+                    thisLinePath = linePath{i};
+                    cmdPath = strrep(thisLineId, newline, ''' newline ''');
+                    msg = sprintf('<a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, thisLinePath);
+                    msg = append("⭐ 信号线路径: ", msg);
+                    idx = sprintf('<a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, string(i));
+                    msg = append(idx, ". ", msg);
+                    msgAll = append(msgAll, msg, "\n");
+                end
+                varargout{1} = linePath;
+                varargout{2} = msgAll;
+            else
+                for i = 1:length(line)
+                    thisLineId = lineId{i};
+                    thisLinePath = linePath{i};
+                    cmdPath = strrep(thisLineId, newline, ''' newline ''');
+                    msg = sprintf('<a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, thisLinePath);
+                    msg = append("⭐ 信号线路径: ", msg);
+                    idx = sprintf('<a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, string(i));
+                    msg = append(idx, ". ", msg);
+                    disp(msg);
+                end
+            end
+        end
+
+
+        function varargout = getLineHandle(opts)
+
+            arguments
+                opts.line = '';
+                opts.id = '';
+            end
+            for i = 1:nargout
+                varargout{i} = [];
+            end
+
+            line = opts.line;
+            id = opts.id;
+
+            if isequal(id, '')
+                line = myOp.slx.general.checkLine(line);
+            else
+                line = myOp.slx.line.getAll('line', id);
+            end
+
+            line = myOp.slx.general.checkLine(line);
+
+            if isempty(line)
+                return;
+            end
+
+            handle = cell(length(line), 1);
+
+            for i = 1:length(line)
+                thisLine = line{i};
+                handle{i} = thisLine.Handle;
+            end
+            if nargout == 1
+                varargout{1} = handle;
+            elseif nargout == 2
+                msgAll = [];
+                for i = 1:length(line)
+                    thisLine = line{i};
+                    thisHandle = handle(i);
+                    thisPath = myOp.slx.line.getLineFullId('line', thisLine);
+                    cmdPath = strrep(thisPath{1}, newline, ''' newline ''');
+                    msg = sprintf('<a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, string(thisHandle));
+                    msg = append("⭐ 信号线句柄: ", msg);
+                    idx = sprintf('<a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, string(i));
+                    msg = append(idx, ". ", msg);
+                    msgAll = append(msgAll, msg, "\n");
+                end
+                varargout{1} = handle;
+                varargout{2} = msgAll;
+            else
+                for i = 1:length(line)
+                    thisLine = line{i};
+                    thisHandle = handle(i);
+                    thisPath = myOp.slx.line.getLineFullId('line', thisLine);
+                    cmdPath = strrep(thisPath{1}, newline, ''' newline ''');
+                    msg = sprintf('<a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, string(thisHandle));
+                    msg = append("⭐ 信号线句柄: ", msg);
+                    idx = sprintf('<a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, string(i));
+                    msg = append(idx, ". ", msg);
+                    disp(msg);
+                end
+            end
+        end
+
+
+        function [lineDataType] = getLineDataType(opts)
 
             arguments
                 opts.line = '';
@@ -339,7 +494,7 @@ classdef line
                 return;
             end
             allLine = myOp.slx.line.line_logAllLine('onlyRead', true);
-            lineFullId = myOp.slx.line.line_getLineFullId('line', line);
+            lineFullId = myOp.slx.line.getLineFullId('line', line);
 
             % 检查allLine是否包含全部的lineFullId
             isOk = myOp.slx.line.line_checkAllLineLog('line', line);
@@ -348,7 +503,7 @@ classdef line
             end
             isOk = myOp.slx.line.line_checkAllLineLog('line', line);
             if ~isOk
-                error(append("Error [line_getLineDataType]: there is a line not in allLineLog, please run myOp.slx.line.line_logAllLine() and check."));
+                error(append("Error [getLineDataType]: there is a line not in allLineLog, please run myOp.slx.line.line_logAllLine() and check."));
             end
 
             lineDataType = cell(length(line), 1);
@@ -362,7 +517,7 @@ classdef line
         end
 
 
-        function [lineDimensions] = line_getLineDimensions(opts)
+        function [lineDimensions] = getLineDimensions(opts)
 
             arguments
                 opts.line = '';
@@ -376,7 +531,7 @@ classdef line
                 return;
             end
             allLine = myOp.slx.line.line_logAllLine('onlyRead', true);
-            lineFullId = myOp.slx.line.line_getLineFullId('line', line);
+            lineFullId = myOp.slx.line.getLineFullId('line', line);
 
             % 检查allLine是否包含全部的lineFullId
             isOk = myOp.slx.line.line_checkAllLineLog('line', line);
@@ -385,7 +540,7 @@ classdef line
             end
             isOk = myOp.slx.line.line_checkAllLineLog('line', line);
             if ~isOk
-                error(append("Error [line_getLineDimensions]: there is a line not in allLineLog, please run myOp.slx.line.line_logAllLine() and check."));
+                error(append("Error [getLineDimensions]: there is a line not in allLineLog, please run myOp.slx.line.line_logAllLine() and check."));
             end
 
             lineDimensions = cell(length(line), 1);
@@ -414,7 +569,7 @@ classdef line
             end
 
             allLine = myOp.slx.line.line_logAllLine('onlyRead', true);
-            lineFullId = myOp.slx.line.line_getLineFullId('line', line);
+            lineFullId = myOp.slx.line.getLineFullId('line', line);
 
             isOk = true;
             for i = 1:length(line)
@@ -544,15 +699,33 @@ classdef line
                         % 搜寻switch模块
                         switchBlock = find_system(parentBlock.Handle, 'SearchDepth', 1, 'BlockType', 'Switch');
                         if isempty(switchBlock)
-                            continue;
+                            % 查找 Operator 为 'Not' 的 logical Operator 模块
+                            notBlock = find_system(parentBlock.Handle, 'SearchDepth', 1, 'BlockType', 'Logic', 'Operator', 'NOT');
+                            % 查找 Operator 为 'Or' 的 logical Operator 模块
+                            orBlock = find_system(parentBlock.Handle, 'SearchDepth', 1, 'BlockType', 'Logic', 'Operator', 'OR');
+                            if isempty(notBlock) || isempty(orBlock)
+                                continue;
+                            elseif length(notBlock) ~= 1 || length(orBlock) ~= 1
+                                continue;
+                            else
+                                notBlock = myOp.slx.general.parseBlock(notBlock);
+                                notBlock = notBlock{1};
+                                orBlock = myOp.slx.general.parseBlock(orBlock);
+                                orBlock = orBlock{1};
+                                % 获取not模块的输入端口连接的block
+                                consOvrdBlock = myOp.slx.block.getLastBlock('block', notBlock, 'portNum', 1);
+                                % 获取or模块的第一个输入端口连接的block
+                                consBlock = myOp.slx.block.getLastBlock('block', orBlock, 'portNum', 1);
+                            end
+                        else
+                            switchBlock = myOp.slx.general.parseBlock(switchBlock);
+                            switchBlock = switchBlock{1};
+                            switchBlock = myOp.slx.general.parseBlock(switchBlock);
+                            % 获取switch模块的输入端口连接的block
+                            consBlock = myOp.slx.block.getLastBlock('block', switchBlock, 'portNum', 1);
+                            consOvrdBlock = myOp.slx.block.getLastBlock('block', switchBlock, 'portNum', 2);
                         end
-                        switchBlock = myOp.slx.general.parseBlock(switchBlock);
-                        switchBlock = switchBlock{1};
-                        switchBlock = myOp.slx.general.parseBlock(switchBlock);
-                        % 获取switch模块的输入端口连接的block
-                        consBlock = myOp.slx.block.getLastBlock('block', switchBlock, 'portNum', 1);
-                        consOvrdBlock = myOp.slx.block.getLastBlock('block', switchBlock, 'portNum', 2);
-
+                        
                         parName = line{i}.Name;
                         parName = strrep(parName, '<', '');
                         parName = strrep(parName, '>', '');
@@ -581,12 +754,12 @@ classdef line
                             if isParamAdd
                                 % 从基础工作区中查看是否parName存在
                                 if evalin('base', ['exist(''', parName, ''', ''var'')']) == 0
-                                    dataType = myOp.slx.line.line_getLineDataType('line', thisLine);
+                                    dataType = myOp.slx.line.getLineDataType('line', thisLine);
                                     dataType = dataType{1};
                                     if strcmp(dataType, 'Error')
                                         dataType = 'double';
                                     end
-                                    dimensions = myOp.slx.line.line_getLineDimensions('line', thisLine);
+                                    dimensions = myOp.slx.line.getLineDimensions('line', thisLine);
                                     myOp.slx.std.createStdParam(parName, 0, dataType, 'dimensions', dimensions{1});
                                 end
                                 % 从基础工作区中查看是否parOvrdName存在
@@ -645,7 +818,7 @@ classdef line
         end
     
 
-        function blocks = line_getLinkedBlock(opts)
+        function [blocks, portNum] = line_getLinkedBlock(opts)
 
             arguments
                 opts.line = '';
@@ -662,19 +835,514 @@ classdef line
 
             ports = myOp.slx.line.line_getLinkedPort('line', line, 'direction', opts.direction);
             blocks = cell(length(ports), 1);
+            portNum = cell(length(ports), 1);
             for i = 1:length(ports)
                 thisPorts = ports{i};
+                thisPortNums = zeros(length(thisPorts), 1);
                 thisBlocks = cell(length(thisPorts), 1);
                 for j = 1:length(thisPorts)
                     thisPort = thisPorts(j);
                     parentPath = get_param(thisPort.Handle, 'Parent');
                     thisBlock = myOp.slx.general.parseBlock(parentPath);
                     thisBlocks{j} = thisBlock{1};
+                    thisPortNums(j) = get_param(thisPort.Handle, 'PortNumber');
                 end
                 thisBlocks = cell2mat(thisBlocks);
                 blocks{i} = thisBlocks;
+                portNum{i} = thisPortNums;
             end
         end
     
+
+        function lines = getAll(opts)
+
+            arguments
+                opts.block = '';
+                opts.line = '';
+            end
+
+            block = opts.block;
+            line = opts.line;
+
+            block = myOp.slx.general.checkBlock(block);
+            line = myOp.slx.general.checkLine(line);
+
+            if ~isempty(line)
+                lines = line;
+            else
+                lines = {};
+            end
+            
+            for i = 1:length(block)
+                thisBlock = block{i};
+                thisLines = myOp.slx.general.find_system(...
+                    thisBlock.Handle, ...
+                    'Type', 'Line' ...
+                );
+                thisLines = myOp.slx.general.checkLine(thisLines);
+                lines = [lines; thisLines];
+            end
+            lines = lines(:);
+        end
+
+
+        function lines = getAllLoggedLines(opts)
+
+            arguments
+                opts.block = '';
+                opts.line = '';
+            end
+
+            allLines = myOp.slx.line.getAll(...
+                'block', opts.block, ...
+                'line', opts.line ...
+            );
+
+            mask = cellfun(@(x) ~isempty(x) && isprop(x, 'DataLogging') && isequal(x.DataLogging, true), allLines);
+            lines = allLines(mask);
+
+        end
+
+
+        function traces = trace(opts)
+
+            arguments
+                opts.line = '';
+            end
+
+            line = opts.line;
+
+            line = myOp.slx.general.checkLine(line);
+
+            traces = {};
+            if isempty(line)
+                return;
+            end
+            if length(line) ~= 1
+                msg = "⚠️ 注意: 目前 myOp.slx.line.trace 仅支持单条信号线追踪, 输入的信号线超过1条, 将仅追踪第1条.";
+                warning(msg);
+            end
+            line = line{1};
+
+            % 
+
+            traces = cell2mat(traces);
+        end
+
+
+        function names = getPrpgtSigName(opts)
+            arguments
+                opts.line = '';
+            end
+
+            line = opts.line;
+
+            line = myOp.slx.general.checkLine(line);
+
+            if isempty(line)
+                names = "";
+                return;
+            end
+
+            names = strings(length(line), 1);
+            srcLine = cell(length(line), 1);
+
+            for i = 1:length(line)
+                thisLine = line{i};
+                srcPort = get_param(thisLine.Handle, 'SrcPortHandle');
+                srcPort = myOp.slx.general.parseBlock(srcPort);
+                srcPort = srcPort{1};
+                srcBlock = get_param(srcPort.Handle, 'Parent');
+                srcBlock = myOp.slx.general.parseBlock(srcBlock);
+                srcBlock = srcBlock{1};
+                trace = myTraceSignal(...
+                    'direction', 'b', ...
+                    'block', srcBlock, ...
+                    'porttype', 'o', ...
+                    'portNum', srcPort.PortNumber ...
+                );
+                traceLine = trace.trace.lines;
+                if isempty(traceLine)
+                    names(i) = "";
+                    srcLine{i} = thisLine;
+                    continue;
+                end
+                traceLine = myOp.slx.general.parseLine(traceLine);
+                % 颠倒顺序
+                traceLine = traceLine(:);
+                traceLine = flipud(traceLine);
+                hasSigName = false;
+                for j = 1:length(traceLine)
+                    thisTraceLine = traceLine{j};
+                    sigName = get_param(thisTraceLine.Handle, 'Name');
+                    if ~isequal(sigName, "")
+                        if (startsWith(sigName, "<") || endsWith(sigName, ">"))
+                            sigName = strrep(sigName, "<", "");
+                            sigName = strrep(sigName, ">", "");
+                        end
+                        idx = cellfun(@(x) isequal(x.Name, sigName), traceLine);
+                        names(i) = sigName;
+                        srcLine{i} = traceLine{idx};
+                        hasSigName = true;
+                        break;
+                    end
+                end
+                if ~hasSigName
+                    names(i) = "";
+                    srcLine{i} = thisLine;
+                end
+            end
+
+            if nargout == 0
+                % 显示超链接
+                msg = "✨ 选中的信号线传播的信号名称如下:\n";
+                for i = 1:length(names)
+                    thisName = names(i);
+                    thisPath = getfullname(line{i}.Handle);
+                    if isequal(thisName, "")
+                        thisName = "(无名称)";
+                    end
+                    newMsg = sprintf('🔗 <a href="matlab:hilite_system(%.64g,''error'')">%s</a>', srcLine{i}.Handle, thisName);
+                    msg = append(msg, newMsg, "\n");
+                end
+                fprintf(msg);
+                clear names;
+            end
+
+        end
+
+
+        function varargout = getSampleTime(opts)
+
+            arguments
+                opts.line = '';
+            end
+
+            for i = 1:nargout
+                varargout{i} = [];
+            end
+
+            line = opts.line;
+            line = myOp.slx.general.checkLine(line);
+            sampleTime = cell(length(line), 1);
+            if isempty(line)
+                return;
+            end
+            for i = 1:length(line)
+                thisLine = line{i};
+                [linkedBlocks, linkedPortNums] = myOp.slx.line.line_getLinkedBlock("line", thisLine, "direction", "src");
+                if ~isempty(linkedBlocks)
+                    linkedBlock = linkedBlocks{1};
+                    linkedBlock = linkedBlock(1);
+                    linkedPortNum = linkedPortNums{1};
+                    linkedPortNum = linkedPortNum(1);
+                    traceDst = myTraceSignal(...
+                        'direction', 'dst', ...
+                        'block', linkedBlock, ...
+                        'porttype', 'o', ...
+                        'portNum', linkedPortNum ...
+                    );
+                    traceDstBlocks = traceDst.trace.blocks;
+                else
+                    traceDstBlocks = {};
+                end
+
+                [linkedBlocks, linkedPortNums] = myOp.slx.line.line_getLinkedBlock("line", thisLine, "direction", "dst");
+                if ~isempty(linkedBlocks)
+                    linkedBlock = linkedBlocks{1};
+                    linkedBlock = linkedBlock(1);
+                    linkedPortNum = linkedPortNums{1};
+                    traceSrc = myTraceSignal(...
+                        'direction', 'src', ...
+                        'block', linkedBlock, ...
+                        'porttype', 'i', ...
+                        'portNum', linkedPortNum ...
+                    );
+                    traceSrcBlocks = traceSrc.trace.blocks;
+                    traceSrcBlocks = myOp.slx.general.parseBlock(traceSrcBlocks);
+                else
+                    traceSrcBlocks = {};
+                end
+                if ~isempty(traceDstBlocks)
+                    traceDstBlocks = myOp.slx.general.parseBlock(traceDstBlocks);
+                end
+                if ~isempty(traceSrcBlocks)
+                    traceSrcBlocks = myOp.slx.general.parseBlock(traceSrcBlocks);
+                end
+                traceAllBlocks = [traceDstBlocks; traceSrcBlocks];
+
+                % 开始计算采样时间
+                isOk = false;
+                % 首先找到非 RateTransition, subsystem, ModelReference 的 block
+                idx1 = cellfun(@(x) ~myOp.slx.priTools.isSubsystem(x), traceAllBlocks);
+                idx2 = cellfun(@(x) ~myOp.slx.RateTransition.isRateTransition(x), traceAllBlocks);
+                idx = idx1 & idx2;
+                targetBlock = traceAllBlocks(idx);
+                if ~isempty(targetBlock)
+                    for j = 1:length(targetBlock)
+                        thisTargetBlock = targetBlock{j};
+                        thisSt = get_param(thisTargetBlock.Handle, 'CompiledSampleTime');
+                        if ~isempty(thisSt)
+                            if ~iscell(thisSt)
+                                sampleTime{i} = thisSt;
+                                isOk = true;
+                                break;
+                            else
+                                continue;
+                            end
+                        else
+                            continue;
+                        end
+                    end
+                end
+                % 如果没有找到, 则找 RateTransition 的 block
+                if ~isOk
+                    % 先找 src 方向的 RateTransition
+                    idx = cellfun(@(x) myOp.slx.RateTransition.isRateTransition(x), targetBlock);
+                    targetBlock = traceSrcBlocks(idx);
+                    if ~isempty(targetBlock)
+                        for j = 1:length(targetBlock)
+                            thisTargetBlock = targetBlock{j};
+                            thisSt = get_param(thisTargetBlock.Handle, 'CompiledSampleTime');
+                            thisStOut = get_param(thisTargetBlock.Handle, 'OutPortSampleTime');
+                            thisStOut = eval(thisStOut);
+                            thisStOut = [thisStOut, 0];
+                            sampleTime{i} = thisStOut;
+                            isOk = true;
+                            break;
+                        end
+                    end
+                end
+                % 如果还没有找到, 则找 dst 方向的 RateTransition
+                if ~isOk
+                    idx = cellfun(@(x) myOp.slx.RateTransition.isRateTransition(x), targetBlock);
+                    targetBlock = traceDstBlocks(idx);
+                    if ~isempty(targetBlock)
+                        for j = 1:length(targetBlock)
+                            thisTargetBlock = targetBlock{j};
+                            thisSt = get_param(thisTargetBlock.Handle, 'CompiledSampleTime');
+                            thisStOut = get_param(thisTargetBlock.Handle, 'InPortSampleTime');
+                            thisStOut = eval(thisStOut);
+                            thisStOut = [thisStOut, 0];
+                            if ~iscell(thisSt)
+                                sampleTime{i} = thisSt;
+                                isOk = true;
+                            else
+                                % 从thisSt里排除thisStOut
+                                for k = 1:length(thisSt)
+                                    if ~isequal(thisSt{k}, thisStOut)
+                                        sampleTime{i} = thisSt{k};
+                                        isOk = true;
+                                        break;
+                                    end
+                                end
+                            end
+                            if isOk
+                                break;
+                            end
+                        end
+                    end
+                end
+                % 如果还没有找到, 则找 subsystem 的 block
+                if ~isOk
+                    idx = cellfun(@(x) myOp.slx.priTools.isSubsystem(x), targetBlock);
+                    targetBlock = traceAllBlocks(idx);
+                    if ~isempty(targetBlock)
+                        for j = 1:length(targetBlock)
+                            thisTargetBlock = targetBlock{j};
+                            thisSt = get_param(thisTargetBlock.Handle, 'CompiledSampleTime');
+                            if ~isempty(thisSt)
+                                if ~iscell(thisSt)
+                                    sampleTime{i} = thisSt;
+                                    isOk = true;
+                                    break;
+                                else
+                                    continue;
+                                end
+                            else
+                                continue;
+                            end
+                        end
+                    end
+                end
+                if ~isOk
+                    thisLinePath = myOp.slx.line.getLineFullId("line", thisLine);
+                    thisLinePath = thisLinePath{1};
+                    cmdPath = strrep(thisLinePath, newline, ''' newline ''');
+                    errorMsg = sprintf('<a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, thisLinePath);
+                    error(append("❌️ 错误: 无法获取信号线 ", errorMsg, " 的采样时间."));
+                end
+            end
+            if nargout == 1
+                varargout{1} = sampleTime;
+            elseif nargout >= 2
+                msgAll = [];
+                for i = 1:length(sampleTime)
+                    thisSt = sampleTime{i};
+                    thisLine = line{i};
+                    thisLinePath = myOp.slx.line.getLinePath("line", thisLine);
+                    cmdPath = strrep(thisLinePath, newline, ''' newline ''');
+                    idx = sprintf('<a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, string(i));
+                    msg = sprintf('✨ 信号线 <a href="matlab:myhilite([''%s''])">%s</a> 的采样时间为: ', cmdPath, thisLinePath);
+                    if isempty(thisSt)
+                        msg = append(msg, "(空)");
+                    elseif iscell(thisSt)
+                        stStrs = cell(length(thisSt), 1);
+                        for j = 1:length(thisSt)
+                            stStrs{j} = mat2str(thisSt{j});
+                        end
+                        stStr = strjoin(stStrs, ', ');
+                        msg = append(msg, stStr);
+                    else
+                        stStr = mat2str(thisSt);
+                        msg = append(msg, stStr);
+                    end
+                    msg = append(idx, ". ", msg);
+                    msgAll = append(msgAll, msg, newline);
+                end
+                varargout{1} = sampleTime;
+                varargout{2} = msgAll;
+            else
+                for i = 1:length(sampleTime)
+                    thisSt = sampleTime{i};
+                    thisLine = line{i};
+                    thisLinePath = myOp.slx.line.getLinePath("line", thisLine);
+                    thisLinePath = thisLinePath{1};
+                    cmdPath = strrep(thisLinePath, newline, ''' newline ''');
+                    idx = sprintf('<a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, string(i));
+                    msg = sprintf('✨ 信号线 <a href="matlab:myhilite([''%s''])">%s</a> 的采样时间为: ', cmdPath, thisLinePath);
+                    if isempty(thisSt)
+                        msg = append(msg, "(空)");
+                    elseif iscell(thisSt)
+                        stStrs = cell(length(thisSt), 1);
+                        for j = 1:length(thisSt)
+                            stStrs{j} = mat2str(thisSt{j});
+                        end
+                        stStr = strjoin(stStrs, ', ');
+                        msg = append(msg, stStr);
+                    else
+                        stStr = mat2str(thisSt);
+                        msg = append(msg, stStr);
+                    end
+                    msg = append(idx, ". ", msg);
+                    disp(msg);
+                end
+            end
+        end
+
+        
+        function varargout = checkSignalHierarchy(opts)
+            % checkSignalHierarchy 解析信号层次结构
+            % sigList = checkSignalHierarchy(SignalHierarchy)
+
+            arguments
+                opts.line = '';
+                opts.depth (1,1) double = Inf; % 🟢 新增: 指定最大搜索深度，默认为 Inf (无限制)
+            end
+            
+            line = myOp.slx.general.checkLine(opts.line);
+            sigList = {};
+            if isempty(line)
+                if nargout >= 1
+                    varargout{1} = sigList;
+                end
+                return;
+            end
+
+            for i = 1:length(line)
+                thisLineSigList = [];
+                thisLine = line{i};
+                port = myOp.slx.line.line_getLinkedPort('line', thisLine, 'direction', 'src');
+                if isempty(port)
+                    sigList{i} = {};
+                    continue;
+                end
+                port = port{1};
+                sigHierarchy = get_param(port.Handle, 'SignalHierarchy');
+                
+                % 🟡 传入 depth 参数进行层级控制
+                thisLineSigList = myOp.slx.line.parseSignalHierarchy(sigHierarchy, opts.depth);
+                sigList{i} = thisLineSigList;
+            end
+            if nargout >= 1
+                varargout{1} = sigList;
+            else
+                for i = 1:length(sigList)
+                    thisSigList = sigList{i};
+                    thisLine = line{i};
+                    thisLinePath = myOp.slx.line.getLinePath("line", thisLine);
+                    thisLinePath = string(thisLinePath);
+                    cmdPath = strrep(thisLinePath, newline, ''' newline ''');
+                    idx = sprintf('<a href="matlab:myhilite([''%s''])">%s</a>', cmdPath, string(i));
+                    msg = sprintf('✨ 信号线 <a href="matlab:myhilite([''%s''])">%s</a> 的信号层次结构为: ', cmdPath, thisLinePath);
+                    msg = append(idx, ". ", msg);
+                    if isempty(thisSigList)
+                        msg = append(msg, "(空)");
+                    else
+                        sigStr = strjoin(thisSigList, newline);
+                        msg = append(msg, newline, sigStr);
+                    end
+                    disp(msg);
+                end
+            end
+        end
+
+    end
+
+    methods(Access = private, Static)
+
+        function sigList = parseSignalHierarchy(SignalHierarchy, maxDepth)
+            % parseSignalHierarchy 解析信号层次结构 (迭代版本)
+            
+            if nargin < 2
+                maxDepth = Inf;
+            end
+
+            % 初始化输出为字符串列向量，比空矩阵 [] 拼接更稳健
+            sigList = []; 
+
+            % 🔵 1. 初始化栈 (Stack)
+            % 栈内每个元素是一个结构体，保存当前节点、已累积的前缀路径、当前深度
+            stack = struct('node', SignalHierarchy, 'prefix', "", 'depth', 1);
+
+            while ~isempty(stack)
+                % 弹栈 (取最后一个元素并移除)
+                currItem = stack(end);
+                stack(end) = [];
+
+                node = currItem.node;
+                prefix = currItem.prefix;
+                depth = currItem.depth;
+
+                signalName = string(node.SignalName);
+
+                % 🟣 2. 拼接当前层级的信号路径
+                if signalName == ""
+                    nextPrefix = prefix;
+                elseif prefix == ""
+                    nextPrefix = signalName;
+                else
+                    nextPrefix = prefix + "." + signalName;
+                end
+
+                % 🟢 3. 截断条件：判断是否到达叶子节点，或已达到最大指定深度
+                children = node.Children;
+                if isempty(children) || depth >= maxDepth
+                    if nextPrefix ~= ""
+                        sigList = [sigList; nextPrefix];
+                    end
+                else
+                    % 🟡 4. 子节点压栈
+                    % 重点：为了保持与原递归函数完全一致的输出顺序（从上到下），这里必须【倒序压栈】
+                    for i = length(children):-1:1
+                        newItem.node = children(i);
+                        newItem.prefix = nextPrefix;
+                        newItem.depth = depth + 1;
+                        stack(end+1) = newItem; %#ok<AGROW> 
+                    end
+                end
+            end
+        end
+
     end
 end 

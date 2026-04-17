@@ -2,26 +2,6 @@ classdef general
 
     methods(Static)
 
-        function data = readMyMdfData(filePath)
-
-            persistent dataBuf;
-            persistent lastFilePath;
-        
-            if isempty(dataBuf)
-                dataBuf = [];
-                lastFilePath = '';
-            end
-        
-            % 检查文件名是否相同
-            if strcmp(lastFilePath, filePath) && ~isempty(dataBuf)
-                data = dataBuf;
-                return;
-            end
-            data = mdfRead(filePath);
-            lastFilePath = filePath;
-            dataBuf = data;
-        end
-
         function varDatas = readMdfData(opts)
 
             arguments
@@ -93,6 +73,8 @@ classdef general
                             varData.startTime = mdfStartTime;
                             varData.Tss = timeseries(varData.Data, varData.Time);
                             varData.Tss.Name = varData.name;
+                            varData.Tb = timetable(seconds(varData.Time), varData.Data, 'VariableNames', {varData.name});
+                            varData.Tb.Properties.DimensionNames{1} = 'Time';
                             varDatas = [varDatas; varData];
                         else
                             try
@@ -105,6 +87,8 @@ classdef general
                                 varData.startTime = mdfStartTime;
                                 varData.Tss = timeseries(varData.Data, varData.Time);
                                 varData.Tss.Name = varData.name;
+                                varData.Tb = timetable(seconds(varData.Time), varData.Data, 'VariableNames', {varData.name});
+                                varData.Tb.Properties.DimensionNames{1} = 'Time';
                                 varDatas = [varDatas; varData];
                             catch
                                 % 跳过无法解析的变量
@@ -136,6 +120,8 @@ classdef general
                                 varData.startTime = mdfStartTime;
                                 varData.Tss = timeseries(varData.Data, varData.Time);
                                 varData.Tss.Name = varData.name;
+                                varData.Tb = timetable(seconds(varData.Time), varData.Data, 'VariableNames', {varData.name});
+                                varData.Tb.Properties.DimensionNames{1} = 'Time';
                                 varDatas = [varDatas; varData];
                                 isGet = true;
                             else
@@ -148,6 +134,8 @@ classdef general
                                 varData.startTime = mdfStartTime;
                                 varData.Tss = timeseries(varData.Data, varData.Time);
                                 varData.Tss.Name = varData.name;
+                                varData.Tb = timetable(seconds(varData.Time), varData.Data, 'VariableNames', {varData.name});
+                                varData.Tb.Properties.DimensionNames{1} = 'Time';
                                 varDatas = [varDatas; varData];
                                 isGet = true;
                             end
@@ -160,5 +148,30 @@ classdef general
             end
             varDatas = myOp.mdf.incaData(varDatas);
         end
+    
+    end
+
+    methods(Static, Access = private)
+
+        function data = readMyMdfData(filePath)
+
+            persistent dataBuf;
+            persistent lastFilePath;
+        
+            if isempty(dataBuf)
+                dataBuf = [];
+                lastFilePath = '';
+            end
+        
+            % 检查文件名是否相同
+            if strcmp(lastFilePath, filePath) && ~isempty(dataBuf)
+                data = dataBuf;
+                return;
+            end
+            data = mdfRead(filePath);
+            lastFilePath = filePath;
+            dataBuf = data;
+        end
+
     end
 end

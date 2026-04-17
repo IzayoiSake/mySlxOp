@@ -87,6 +87,7 @@ classdef goFrom
 
             arguments
                 opts.block = '';
+                opts.changeMatched {mustBeNumericOrLogical(opts.changeMatched)} = true;
             end
 
             block = opts.block;
@@ -105,9 +106,20 @@ classdef goFrom
                     % 获取输入信号线的名字
                     line = get_param(inport, 'Line');
                     lineName = get_param(line, 'Name');
+                    if isequal(lineName, "")
+                        lineName = myOp.slx.line.getPrpgtSigName("line", line);
+                    end
                     lineName = myOp.slx.line.normalizeName("name", lineName);
                     if ~isempty(lineName)
                         % 将线的名字赋值给GotoTag
+                        if opts.changeMatched
+                            matched = myOp.slx.goFrom.getMatched('block', thisBlock);
+                            for j = 1:length(matched)
+                                matchedBlock = matched{j};
+                                % 同步更新对应的 From 模块的 GotoTag
+                                set_param(matchedBlock.Handle, 'GotoTag', lineName);
+                            end
+                        end
                         set_param(thisBlock.Handle, 'GotoTag', lineName);
                     end
                 end
@@ -118,9 +130,20 @@ classdef goFrom
                     % 获取输出信号线的名字
                     line = get_param(outport, 'Line');
                     lineName = get_param(line, 'Name');
+                    if isequal(lineName, "")
+                        lineName = myOp.slx.line.getPrpgtSigName("line", line);
+                    end
                     lineName = myOp.slx.line.normalizeName("name", lineName);
                     if ~isempty(lineName)
                         % 将线的名字赋值给GotoTag
+                        if opts.changeMatched
+                            matched = myOp.slx.goFrom.getMatched('block', thisBlock);
+                            for j = 1:length(matched)
+                                matchedBlock = matched{j};
+                                % 同步更新对应的 Goto 模块的 GotoTag
+                                set_param(matchedBlock.Handle, 'GotoTag', lineName);
+                            end
+                        end
                         set_param(thisBlock.Handle, 'GotoTag', lineName);
                     end
                 end
@@ -227,6 +250,53 @@ classdef goFrom
                         'GotoTag', fromName, ...
                         'Position', gotoPos);
                 end
+            end
+        end
+
+        function matched = getMatched(opts)
+        % GETMATCHED  获取 GoTo / From 模块的配对模块
+            arguments
+                opts.block = '';
+            end
+            block = myOp.slx.general.checkBlock(opts.block);
+            matched = {};
+            if isempty(block)
+                return;
+            end
+            if length(block) > 1
+                msg = append("myOp.slx.goFrom.getMatched.MultipleBlocks", newline, ...
+                    "⚠️当输入多个模块时，仅处理第一个模块。");
+                warning(msg);
+            end
+            thisBlock = block{1};
+            if strcmp(thisBlock.BlockType, 'Goto')
+                % 获取Goto模块的名字
+                gotoName = get_param(thisBlock.Handle, 'GotoTag');
+                % 获取Goto模块所在系统
+                parentSys = get_param(thisBlock.Handle, 'Parent');
+                % 查找对应的From模块
+                matchedFrom = find_system(parentSys, 'searchdepth', 1, 'BlockType', 'From', 'GotoTag', gotoName);
+                if isempty(matchedFrom)
+                    % disp("⚠️ 未找到对应的 From 模块。");
+                    return;
+                end
+                % disp("✅ 找到对应的 From 模块：");
+                matched = myOp.slx.general.parseBlock(matchedFrom);
+            elseif strcmp(thisBlock.BlockType, 'From')
+                % 获取From模块的名字
+                fromName = get_param(thisBlock.Handle, 'GotoTag');
+                % 获取From模块所在系统
+                parentSys = get_param(thisBlock.Handle, 'Parent');
+                % 查找对应的Goto模块
+                matchedGoto = find_system(parentSys, 'searchdepth', 1, 'BlockType', 'Goto', 'GotoTag', fromName);
+                if isempty(matchedGoto)
+                    % disp("⚠️ 未找到对应的 Goto 模块。");
+                    return;
+                end
+                % disp("✅ 找到对应的 Goto 模块：");
+                matched = myOp.slx.general.parseBlock(matchedGoto);
+            else
+                
             end
         end
 

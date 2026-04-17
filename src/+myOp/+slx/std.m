@@ -93,7 +93,6 @@ classdef std
             end
         end
 
-
         function createStdSig(name, dataType, headerName, opts)
         %   创建标准信号
         %   createStdSig(name, dataType, headerName, opts)
@@ -127,8 +126,8 @@ classdef std
             param.DataType = dataType;
             param.CoderInfo.StorageClass = 'Custom';
             param.CoderInfo.CustomStorageClass = 'ExportToFile';
-            param.CoderInfo.CustomAttributes.HeaderFile = [headerName, '.h'];
-            param.CoderInfo.CustomAttributes.DefinitionFile = [headerName, '.c'];
+            param.CoderInfo.CustomAttributes.HeaderFile = append(headerName, ".h");
+            param.CoderInfo.CustomAttributes.DefinitionFile = append(headerName, ".c");
 
 
             persistent choiceAll;
@@ -173,7 +172,6 @@ classdef std
                 lastTimeSeconds = datetime('now');
             end
         end
-
 
         function dataType = guessDataType(name)
         %   猜测变量的数据类型

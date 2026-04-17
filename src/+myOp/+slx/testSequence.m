@@ -175,7 +175,6 @@ classdef testSequence
         end
 
 
-
         function testSequence_setSymbolDataType(opts)
         % TESTSEQUENCE_SETSYMBOLDATATYPE  将 Test Sequence 模块中符号的数据类型设置为 "Inherit: Same as Simulink"
         %

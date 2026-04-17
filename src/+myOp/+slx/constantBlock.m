@@ -21,20 +21,82 @@ classdef constantBlock
             constantBlocks = [];
             for i = 1:length(block)
                 thisBlock = block{i};
-                thisConstantBlocks = find_system(...
-                    thisBlock.Handle, ...
-                    'LookUnderMasks', 'all', ...
-                    'BlockType', 'Constant' ...
+                thisConstantBlocks = myOp.slx.constantBlock.getAll(...
+                    'block', thisBlock ...
                 );
-                thisConstantBlocks = myOp.slx.general.parseBlock(thisConstantBlocks);
                 constantBlocks = [constantBlocks; thisConstantBlocks];
             end
 
             for i = 1:length(constantBlocks)
                 thisConstantBlock = constantBlocks{i};
-                set_param(thisConstantBlock.Handle, 'Value', '0');
+                set_param(thisConstantBlock.Handle, 'Value', 'false');
             end
         end
     
+        function blocks = checkBlock(opts)
+        % CHECKBLOCK  检查并返回 Constant 模块
+            arguments
+                opts.block = '';
+            end
+
+            block = myOp.slx.general.checkBlock(opts.block);
+
+            blocks = {};
+            for i = 1:length(block)
+                thisBlock = block{i};
+                if strcmp(thisBlock.BlockType, 'Constant')
+                    blocks{end+1} = thisBlock; %#ok<AGROW>
+                end
+            end
+            blocks = blocks(:);
+        end
+            
+        function blocks = getAll(opts)
+        % GETALL  获取所有 Constant 模块
+            arguments
+                opts.block = '';
+            end
+            block = myOp.slx.general.checkBlock(opts.block);
+
+            blocks = {};
+            for i = 1:length(block)
+                thisBlock = block{i};
+                thisConstBlocks = myOp.slx.general.find_system(...
+                    thisBlock.Handle, ...
+                    'Type', 'Block' ...
+                );
+                if isempty(thisConstBlocks)
+                    continue;
+                end
+                thisConstBlocks = myOp.slx.constantBlock.checkBlock(...
+                    'block', thisConstBlocks ...
+                );
+                blocks = [blocks; thisConstBlocks];
+            end
+            blocks = blocks(:);
+        end
+        
+        function inheritSampleTime(opts)
+        % INHERITSAMPLETIME  继承 Constant 模块的采样时间
+            arguments
+                opts.block = '';
+            end
+            block = myOp.slx.general.checkBlock(opts.block);
+
+            constantBlocks = myOp.slx.constantBlock.getAll(...
+                'block', block ...
+            );
+            blockIds = myOp.slx.block.getId(...
+                'block', constantBlocks ...
+            );
+            for i = 1:length(constantBlocks)
+                thisConstantBlock = constantBlocks{i};
+                if ~isequal(get_param(thisConstantBlock.Handle, 'SampleTime'), '-1')
+                    set_param(thisConstantBlock.Handle, 'SampleTime', '-1');
+                    msg = append("✅️ 已将 Constant 模块 '", myhiliteCmd(blockIds{i}, blockIds{i}), "' 的采样时间设置为继承（-1）。");
+                    disp(msg);
+                end
+            end
+        end
     end
 end

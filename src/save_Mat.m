@@ -18,34 +18,46 @@ function save_Mat(opts)
     end
 
     % 从系统获取一个临时文件名
-    myTempName = tempname;
+    myTempDir = tempname;
+    mkdir(myTempDir);
+    myTempName = strrep(tempname, tempdir, '');
+    myTempName = fullfile(myTempDir, myTempName);
     tempNamePath = myTempName;
     disp(append("临时文件: ", """", tempNamePath, """"));
     tempNamePath = append(tempNamePath, ".m");
     % 将基础工作区的变量保存到临时.m文件
     % vars = evalin('base', 'who');
     % matlab.io.saveVariablesToScript(tempNamePath, vars);
-    runStr = append("matlab.io.saveVariablesToScript", "(", """", tempNamePath, """", ")");
+    % matlab.io.saveVariablesToScript('myScript.m', 'pars', 'MaximumArraySize', Inf);
+    runStr = append("matlab.io.saveVariablesToScript", "(", """", tempNamePath, """", ", ", """MaximumArraySize""", ", ", "10000", ")");
     disp(append("正在保存基础工作区变量为Script"));
     evalin('base', runStr);
     % 检查, 如果临时.m文件不存在，则抛出错误
     if ~isfile(tempNamePath)
+        % 删除可能存在的临时目录
+        if isfolder(myTempDir)
+            rmdir(myTempDir, 's');
+        end
         error("临时.m文件创建失败: %s", tempNamePath);
     end
+
+    changedPath = myOp.path.getChangedPath();
+
     try
-        % matlabExe = findMatlab(version="R2023b");
-        % matlabExe = append(matlabExe, '.exe');
-        % disp(append("正在使用Cmd运行Matlab"));
-        % cmd = append('"', matlabExe, '"', ' -nosplash -nodesktop -wait -r "run(''', tempNamePath, '''); save(''', opts.filePath, '''); exit;"');
-        % cmd = append('"', matlabExe, '"', ' -batch -wait "run(''', tempNamePath, '''); save(''', opts.filePath, '''); exit;"');
-        % [status, cmdout] = system(cmd);
-        % if status ~= 0
-        %     error("Cmd运行Matlab失败: %s", cmdout);
-        % end
         disp(append("正在使用COM服务器运行Matlab"));
         h = myOp.comServer.getMatlabComServer();
-        cmd = append("run('", tempNamePath, "'); ");
+        h.Execute("clear;");
+        % 切换工作目录, 添加路径
+        cmd = append("cd(""", pwd, """);");
+        for i = 1:length(changedPath)
+            cmd = append(cmd, "addpath(""", changedPath{i}, """);");
+        end
+        % 运行临时.m文件, 保存.mat文件, 删除路径
+        cmd = append(cmd, "run('", tempNamePath, "'); ");
         cmd = append(cmd, "save('", opts.filePath, "'); ");
+        for i = 1:length(changedPath)
+            cmd = append(cmd, "rmpath(""", changedPath{i}, """);");
+        end
         h.Execute(cmd);
     catch ME
         disp("Matlab调用失败");
@@ -56,8 +68,11 @@ function save_Mat(opts)
             delete(companionFilePath);
             disp(append("删除同步生成的.mat文件: ", companionFilePath));
         end
+        rmdir(myTempDir, 's');
+        disp("已删除临时文件和目录");
         error(ME.message);
     end
+    h.Execute("clear;");
     % 删除临时.m文件
     delete(tempNamePath);
     % 检查, 如果同步生成了.mat文件，则删除它
@@ -66,5 +81,8 @@ function save_Mat(opts)
         delete(companionFilePath);
         disp(append("删除同步生成的.mat文件: ", companionFilePath));
     end
-    disp("完成");
+    % 删除临时目录
+    rmdir(myTempDir, 's');
+    disp("已删除临时文件和目录");
+    disp(append("已保存MAT文件到: ", """", opts.filePath, """"));
 end

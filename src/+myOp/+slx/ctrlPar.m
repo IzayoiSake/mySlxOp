@@ -7,9 +7,11 @@ classdef ctrlPar
 
             arguments
                 opts.block = '';
+                opts.mode {mustBeMember(opts.mode, ["all"; "CtPar"])} = "CtPar";
             end
 
             block = opts.block;
+            mode = opts.mode;
 
             block = myOp.slx.general.checkBlock(block);
 
@@ -28,9 +30,14 @@ classdef ctrlPar
             for i = 1:length(allVars)
                 varName = allVars(i).name;
                 varType = allVars(i).class;
-                if ismember(varType, ctrlParDataTypes)
+                if isequal(mode, "CtPar")
+                    if ismember(varType, ctrlParDataTypes)
+                        ctrlParNames = [ctrlParNames; varName];
+                    end
+                elseif isequal(mode, "all")
                     ctrlParNames = [ctrlParNames; varName];
                 end
+                
             end
 
             % 在sysPath下查找所有 任意属性是ctrlParNames的block
@@ -64,6 +71,41 @@ classdef ctrlPar
                         parValues{i} = 'Error';
                     end
                 end
+            end
+        end
+
+
+        function varargout = extractBlockPars(opts)
+
+            arguments
+                opts.block = '';
+            end
+
+            block = opts.block;
+
+            parNames = myOp.slx.ctrlPar.getBlockPars('block', block);
+            for i = 1:length(parNames)
+                varName = parNames{i};
+                varValue = evalin('base', varName);
+                pars.(varName) = varValue;
+            end
+            if nargout == 1
+                varargout{1} = pars;
+            else
+                % 让用户选择要保存的mat文件路径
+                [filename, pathname] = uiputfile('*.mat', '保存控制参数', 'ctrlPar.mat');
+                if isequal(filename, 0) || isequal(pathname, 0)
+                    disp('用户取消了保存');
+                    return;
+                end
+                if exist(fullfile(pathname, filename), 'file') == 2
+                    save(fullfile(pathname, filename), '-struct', 'pars', '-append');
+                else
+                    save(fullfile(pathname, filename), '-struct', 'pars');
+                end
+                
+                disp(pars);
+                disp(append("已将控制参数保存到 ", fullfile(pathname, filename)));
             end
         end
 
@@ -160,5 +202,132 @@ classdef ctrlPar
         end
 
 
+        function loadExcelPar(opts)
+            
+            arguments
+                opts.filePaths = '';
+                opts.headerNames = '';
+            end
+
+            filePaths = opts.filePaths;
+            headerNames = opts.headerNames;
+
+            if isempty(filePaths)
+                % 等待用户选择文件, 可多选
+                [filenames, pathnames] = uigetfile('*.xlsx', '选择Excel文件', 'MultiSelect', 'on');
+                if isequal(filenames, 0)
+                    disp('用户取消了选择');
+                    return;
+                end
+                filenames = cellstr(filenames);
+                filePaths = cell(length(filenames), 1);
+                for i = 1:length(filenames)
+                    filePaths{i} = fullfile(pathnames, filenames{i});
+                end
+            else
+                if ischar(filePaths) || isstring(filePaths)
+                    filePaths = {filePaths};
+                end
+                filenames = cell(length(filePaths), 1);
+                for i = 1:length(filePaths)
+                    [~, filenames{i}, ~] = fileparts(filePaths{i});
+                end
+            end
+            if ~isempty(headerNames)
+                if (ischar(headerNames) || isstring(headerNames))
+                    headerNames = {headerNames};
+                end
+            end
+
+            for i = 1:length(filePaths)
+                % 读取Excel文件
+                data = readcell(fullfile(filePaths{i}));
+                % 去除前2列
+                newdata = data(:, 3:end);
+                % 获取newdata的Header
+                disp("------------------------------------");
+                header = newdata(1, :);
+                for j = 1:length(header)
+                    disp(header{j});
+                end
+                disp("------------------------------------");
+                disp(append("本文件: ", filenames{i}, " ", "参数名如上."));
+                if isempty(headerNames)
+                    disp("请选择要导入的参数名");
+                    % 等待用户输入参数名
+                    selectedHeader = input('请输入参数名: ', 's');
+                else
+                    selectedHeader = headerNames{i};
+                end
+                if ~contains(header, selectedHeader)
+                    disp(append("Error: ", filenames{i}, " 文件 ", selectedHeader, " 不存在."));
+                    continue;
+                else
+                    disp(append("已选择参数: ", selectedHeader));
+                end
+                % 获取选择的参数列
+                selectedData = newdata(2:end, find(contains(header, selectedHeader)));
+                dataName = data(2:end, 2);
+
+                for j = 1:length(dataName)
+                    try
+                        thisDataName = dataName{j};
+                        % 如果thisDataName包含"BreakPoints"字符串
+                        isBreakPoints = contains(thisDataName, "Breakpoints");
+                        if (isBreakPoints)
+                            thisDataName = strrep(thisDataName, "Breakpoints", "");
+                        end
+
+                        workSpaceVar = evalin('base', thisDataName);
+
+                        evalFunc = append("[", string(selectedData{j}), "]");
+
+                        % 同步数据维度
+                        if (isprop(workSpaceVar, 'Breakpoints') && isBreakPoints)
+                            dim = size(workSpaceVar.Breakpoints.Value);
+                        elseif isprop(workSpaceVar, 'Table')
+                            dim = size(workSpaceVar.Table.Value);
+                        elseif isprop(workSpaceVar, 'Value') || isfield(workSpaceVar, 'Value')
+                            dim = size(workSpaceVar.Value);
+                        elseif isnumeric(workSpaceVar)
+                            dim = size(workSpaceVar);
+                        end
+                        if (length(dim) >= 2)
+                            % 如果维度大于2, 则将evalFunc转换为多维数组
+                            evalFunc = append("reshape(", evalFunc, ", ", "[", num2str(dim), "]", ")");
+                        end
+
+                        % 同步数据类型
+                        if (isprop(workSpaceVar, 'Breakpoints') && isBreakPoints)
+                            dataType = workSpaceVar.Breakpoints.DataType;
+                        elseif isprop(workSpaceVar, 'Table')
+                            dataType = workSpaceVar.Table.DataType;
+                        elseif isprop(workSpaceVar, 'Value') || isfield(workSpaceVar, 'Value')
+                            dataType = workSpaceVar.DataType;
+                        elseif isnumeric(workSpaceVar)
+                            dataType = class(workSpaceVar);
+                        end
+                        evalFunc = append(dataType, "(", evalFunc, ")");
+
+                        % 赋值
+                        if (isprop(workSpaceVar, 'Breakpoints') && isBreakPoints)
+                            workSpaceVar.Breakpoints.Value = eval(evalFunc);
+                        elseif isprop(workSpaceVar, 'Table')
+                            workSpaceVar.Table.Value = eval(evalFunc);
+                        elseif isprop(workSpaceVar, 'Value') || isfield(workSpaceVar, 'Value')
+                            workSpaceVar.Value = eval(evalFunc);
+                        elseif isnumeric(workSpaceVar)
+                            workSpaceVar = eval(evalFunc);
+                        end
+                        assignin('base', thisDataName, workSpaceVar);
+                    catch
+                        disp(append("Error: ", dataName{j}));
+                        continue;
+                    end
+                end
+            end
+        end
+
+        
     end
 end

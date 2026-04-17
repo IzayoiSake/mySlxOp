@@ -14,6 +14,56 @@ classdef general
             sl_refresh_customizations();
         end
 
+        function varargout = find_system(model, varargin)
+            % FIND_SYSTEM 重载 Simulink 的 find_system 函数
+            
+            % 默认 "FindAll" 参数为 "on"
+            finalArgs = {};
+            hasFindAll = false;
+            for i = 1:2:length(varargin)
+                argName = varargin{i};
+                if strcmpi(argName, 'FindAll')
+                    hasFindAll = true;
+                end
+            end
+            if ~hasFindAll
+                finalArgs = [{'FindAll', 'on'}, varargin];
+            else
+                finalArgs = varargin;
+            end
+            % 默认 "LookUnderMasks" 参数为 "all"
+            hasLookUnderMasks = false;
+            for i = 1:2:length(varargin)
+                argName = varargin{i};
+                if strcmpi(argName, 'LookUnderMasks')
+                    hasLookUnderMasks = true;
+                end
+            end
+            if ~hasLookUnderMasks
+                finalArgs = [{'LookUnderMasks', 'all'}, finalArgs];
+            end
+            % 默认 "LookInsideSubsystemReference" 参数为 "on"
+            hasLookInsideSubsystemReference = false;
+            for i = 1:2:length(varargin)
+                argName = varargin{i};
+                if strcmpi(argName, 'LookInsideSubsystemReference')
+                    hasLookInsideSubsystemReference = true;
+                end
+            end
+            if ~hasLookInsideSubsystemReference
+                finalArgs = [{'LookInsideSubsystemReference', 'on'}, finalArgs];
+            end
+            
+            % --- 3. 使用 builtin 调用真正的内置函数 ---
+            % 这是防止递归死循环的关键
+            if nargout > 0
+                [varargout{1:nargout}] = builtin('find_system', model, finalArgs{:});
+            else
+                % 处理没有输出参数的情况（虽然 find_system 通常都有输出）
+                builtin('find_system', model, finalArgs{:});
+            end
+        end
+
         %% 当前系统的Object的基础功能
         function block = checkBlock(block)
             if ~exist('block', 'var')
@@ -47,10 +97,21 @@ classdef general
                 end
             end
             for i = 1:length(block)
-                try
-                    block{i} = get_param(block{i}, 'Object');
-                catch
-                    block{i} = get_param(block{i}.Handle, 'Object');
+                thisBlock = block{i};
+                if ischar(thisBlock)
+                    thisBlock = string(thisBlock);
+                end
+                if (ishandle(thisBlock) && isnumeric(thisBlock))
+                    % 如果block是个 handle
+                    block{i} = get_param(thisBlock, 'Object');
+                elseif (ishandle(thisBlock) && ~isnumeric(thisBlock))
+                    % 如果block是个 Object
+                    block{i} = thisBlock;
+                elseif ischar(thisBlock) || isstring(thisBlock)
+                    % 如果block是个名字
+                    block{i} = get_param(thisBlock, 'Object');
+                else
+                    error("无效的Block");
                 end
             end
         end
@@ -83,10 +144,31 @@ classdef general
                 end
             end
             for i = 1:length(line)
-                try
-                    line{i} = get_param(line{i}, 'Object');
-                catch
-                    line{i} = get_param(line{i}.Handle, 'Object');
+                thisLine = line{i};
+                if ischar(thisLine)
+                    thisLine = string(thisLine);
+                end
+                if isa(thisLine, "Simulink.Segment")
+                    % 如果line是个 Object
+                    line{i} = get_param(thisLine.Handle, 'Object');
+                elseif (ishandle(thisLine) && isnumeric(thisLine))
+                    % 如果line是个 handle
+                    line{i} = get_param(thisLine, 'Object');
+                elseif (ischar(thisLine) || isstring(thisLine))
+                    % 如果line是个名字, 则需要解析
+                    linePath = split(thisLine, ':');
+                    if length(linePath) == 3 || length(linePath) == 4
+                        blockPath = linePath{1};
+                        portType = linePath{2};
+                        portNum = str2double(linePath{3});
+                        blockObj = get_param(blockPath, 'Object');
+                        portObj = myOp.slx.general.getBlockPort("block", blockObj, "portType", portType, "portNum", portNum);
+                        portObj = portObj{1};
+                        lineHandle = get_param(portObj.Handle, 'Line');
+                        line{i} = get_param(lineHandle, 'Object');
+                    end
+                else
+                    error("无效的Line");
                 end
             end
         end
@@ -95,16 +177,16 @@ classdef general
 
             arguments
                 opts.block = '';
-                opts.portType string {mustBeMember(opts.portType, ["inport", "outport", ""])} = "";
+                opts.portType string {mustBeMember(opts.portType, ["inport", "outport", "in", "out", ""])} = "";
                 opts.portNum double {mustBeInteger} = 0;
             end
 
             % 将opts.portType全转成小写
             opts.portType = lower(opts.portType);
             for i = 1:length(opts.portType)
-                if strcmp(opts.portType(i), "input")
+                if (strcmp(opts.portType(i), "input") || strcmp(opts.portType(i), "in"))
                     opts.portType(i) = "inport";
-                elseif strcmp(opts.portType(i), "output")
+                elseif (strcmp(opts.portType(i), "output") || strcmp(opts.portType(i), "out"))
                     opts.portType(i) = "outport";
                 end
             end
@@ -246,6 +328,7 @@ classdef general
                 lineNames = [lineNames; string(resolvedLines{i}.Name)];
             end
         end
+    
     
     
     end

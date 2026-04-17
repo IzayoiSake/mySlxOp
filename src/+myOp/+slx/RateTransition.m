@@ -2,9 +2,9 @@ classdef RateTransition
 
     methods(Static)
 
-        function isOkArray = check(opts)
+        function isOkArray = checkCompliance(opts)
         %==========================================================================
-        % Function: check
+        % Function: checkCompliance
         %
         % 描述 (Description)
         % -------------------------------------------------------------------------
@@ -48,7 +48,7 @@ classdef RateTransition
             end
 
             block = opts.block;
-            block = myOp.slx.general.checkBlock(block);
+            block = myOp.slx.RateTransition.checkBlock("block", block);
 
             isOkArray = true(length(block), 1);
             for i = 1:length(block)
@@ -65,16 +65,16 @@ classdef RateTransition
                     end
                     isOkArray(i) = isOk;
                 else
-                    blockPath = fullfile(thisBlock.Path, thisBlock.Name);
+                    blockPath = thisBlock.getFullName();
                     link = sprintf('<a href="matlab:hilite_system(''%s'')">%s</a>', blockPath, blockPath);
                     error('%s: 不是 Rate Transition Block', link);
                 end
             end
         end
 
-        function listDisintgtyBlocks(opts)
+        function varargout = listNonCompliantBlocks(opts)
         %==========================================================================
-        % Function: listDisintgtyBlocks
+        % Function: listNonCompliantBlocks
         %
         % 描述 (Description):
         %   本函数用于在指定模型/子系统范围内自动扫描所有 Rate Transition
@@ -107,31 +107,153 @@ classdef RateTransition
 
             arguments
                 opts.block = '';
+                opts.return = false;
             end
             block = opts.block;
             block = myOp.slx.general.checkBlock(block);
             
-            allBlocks = [];
+            blocks = myOp.slx.RateTransition.getAll(...
+                'block', block ...
+            );
+            isCompliant = myOp.slx.RateTransition.checkCompliance('block', blocks);
+            nonCompliantIdx = find(~isCompliant);
+            nonCompliantBlocks = blocks(nonCompliantIdx);
+            if opts.return
+                varargout{1} = nonCompliantBlocks;
+            end
+            for i = 1:length(nonCompliantBlocks)
+                thisBlock = nonCompliantBlocks{i};
+                blockPath = thisBlock.getFullName();
+                link = sprintf('<a href="matlab:hilite_system(''%s'')">%s</a>', blockPath, blockPath);
+                head = sprintf('<a href="matlab:hilite_system(''%s'')">%s</a>', blockPath, string(i));
+                fprintf('%s : 🛑 完整性 属性不符合要求: %s\n', head, link);
+            end
+        end
+
+        function is = isRateTransition(block)
+        % ISRATETRANSITION  检查指定 Block 是否均为 Rate Transition Block
+
+            arguments
+                block
+            end
+            block = myOp.slx.general.parseBlock(block);
+
+            is = all(arrayfun(@(x) isa(x{1}, 'Simulink.RateTransition'), block));
+        end
+
+        function blocks = checkBlock(opts)
+        % CHECKBLOCK  识别所选模块中的 Rate Transition 模块
+            arguments
+                opts.block = '';
+            end
+
+            block = myOp.slx.general.checkBlock(opts.block);
+
+            blocks = {};
             for i = 1:length(block)
                 thisBlock = block{i};
-                thisRtBlocks = find_system(thisBlock.Handle, 'lookUnderMasks', 'all', ...
-                    'FollowLinks', 'on', ...
-                    'BlockType', 'RateTransition');
-                allBlocks = [allBlocks; thisRtBlocks(:)];
+                if myOp.slx.RateTransition.isRateTransition(thisBlock)
+                    blocks{end+1} = thisBlock; %#ok<AGROW>
+                end
             end
-            allBlocks = unique(allBlocks);
+            blocks = blocks(:);
+        end
 
-            allBlocks = myOp.slx.general.parseBlock(allBlocks);
+        function blocks = getAll(opts)
+        % GETALL  获取所有 Rate Transition 模块
+            arguments
+                opts.block = '';
+            end
+            block = myOp.slx.general.checkBlock(opts.block);
 
-            for i = 1:length(allBlocks)
-                thisBlock = allBlocks{i};
-                isOk = myOp.slx.RateTransition.check('block', thisBlock);
-                if ~isOk
-                    thisBlockPath = fullfile(thisBlock.Path, thisBlock.Name);
-                    thisBlockPath = strrep(thisBlockPath, '\', '/');
-                    thisBlockName = thisBlock.Name;
-                    link = sprintf('<a href="matlab:hilite_system(''%s'')">%s</a>', thisBlockPath, thisBlockName);
-                    fprintf('Rate Transition Block 完整性 属性不符合要求: %s\n', link);
+            blocks = {};
+            for i = 1:length(block)
+                thisBlock = block{i};
+                thisRtBlocks = myOp.slx.general.find_system(...
+                    thisBlock.Handle, ...
+                    'Type', 'Block' ...
+                );
+                if isempty(thisRtBlocks)
+                    continue;
+                end
+                thisRtBlocks = myOp.slx.RateTransition.checkBlock(...
+                    'block', thisRtBlocks ...
+                );
+                blocks = [blocks; thisRtBlocks];
+            end
+            blocks = blocks(:);
+        end
+
+        function comply(opts)
+        %==========================================================================
+        % Function: comply
+        %
+        % 描述 (Description):
+        %   该函数用于将指定的 Rate Transition Block
+        %   强制设置为合规状态。具体操作为设置：
+        %   "Integrity" = 'on'
+        %   "Deterministic" = 'on'
+        %
+        % 输入参数 (Inputs):
+        %   opts.block
+        %       需要进行合规化处理的范围（模型、具体 Block）。
+        %==========================================================================
+            arguments
+                opts.block = '';
+            end
+
+            % 获取范围内所有的 Rate Transition 模块
+            rtBlocks = myOp.slx.RateTransition.getAll(...
+                'block', opts.block ...
+            );
+
+            for i = 1:length(rtBlocks)
+                thisRt = rtBlocks{i};
+                isComplaint = myOp.slx.RateTransition.checkCompliance(...
+                    'block', thisRt ...
+                );
+                if ~isComplaint
+                    set_param(thisRt.Handle, 'Integrity', 'on');
+                    set_param(thisRt.Handle, 'Deterministic', 'on');
+                    % 显示提示
+                    blockPath = fullfile(thisRt.Path, thisRt.Name);
+                    link = sprintf('<a href="matlab:hilite_system(''%s'')">%s</a>', blockPath, blockPath);
+                    header = sprintf('<a href="matlab:hilite_system(''%s'')">%s</a>', blockPath, string(i));
+                    fprintf('%s : 已设置 %s 为合规状态。\n', header, link);
+                else
+                    % 已合规，无需处理
+                    % 显示提示
+                    blockPath = fullfile(thisRt.Path, thisRt.Name);
+                    link = sprintf('<a href="matlab:hilite_system(''%s'')">%s</a>', blockPath, blockPath);
+                    header = sprintf('<a href="matlab:hilite_system(''%s'')">%s</a>', blockPath, string(i));
+                    fprintf('%s : %s 已为合规状态，无需处理。\n', header, link);
+                end
+            end
+        end
+
+        function clearInitCond(opts)
+        % CLEARINITCOND  清除 Rate Transition Block 的初始条件
+            arguments
+                opts.block = '';
+            end
+
+            % 获取范围内所有的 Rate Transition 模块
+            rtBlocks = myOp.slx.RateTransition.checkBlock(...
+                'block', opts.block ...
+            );
+
+            count = 1;
+            for i = 1:length(rtBlocks)
+                thisRt = rtBlocks{i};
+                
+                if ~isequal(thisRt.InitialCondition, '0')
+                    set_param(thisRt.Handle, 'InitialCondition', '0');
+                    % 显示提示
+                    blockPath = fullfile(thisRt.Path, thisRt.Name);
+                    link = sprintf('<a href="matlab:hilite_system(''%s'')">%s</a>', blockPath, blockPath);
+                    header = sprintf('<a href="matlab:hilite_system(''%s'')">%s</a>', blockPath, string(count));
+                    fprintf('%s : 已清除 %s 的初始条件。\n', header, link);
+                    count = count + 1;
                 end
             end
         end

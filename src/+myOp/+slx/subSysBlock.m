@@ -10,18 +10,12 @@ classdef subSysBlock
             end
             block = opts.block;
             portType = opts.portType;
-            block = myOp.slx.general.checkBlock(block);
+            block = myOp.slx.subSysBlock.checkBlock("block", block);
 
-            subSysBlcok = [];
-            for i = 1:length(block)
-                thisBlock = block{i};
-                if myOp.slx.priTools.isSubsystem(thisBlock) || myOp.slx.priTools.isMatlabFunction(thisBlock)
-                    subSysBlcok = [subSysBlcok, thisBlock];
-                end
-            end
+            subSysBlock = block;
 
-            for i = 1:length(subSysBlcok)
-                thisBlock = subSysBlcok(i);
+            for i = 1:length(subSysBlock)
+                thisBlock = subSysBlock(i);
                 thisBlockInports = myOp.slx.block.getBlockPort("block", thisBlock, "portType", "Inport");
                 thisBlockOutports = myOp.slx.block.getBlockPort("block", thisBlock, "portType", "Outport");
                 thisBlockInportBlocks = find_system(thisBlock.Handle, 'SearchDepth', 1, 'FollowLinks', 'on', 'LookUnderMasks', 'all', 'BlockType', 'Inport');
@@ -59,7 +53,6 @@ classdef subSysBlock
                 end
                 if isequal(portType, 'Outport') || isequal(portType, '')
                     for j = 1:length(thisBlockOutports)
-                        outportName = thisBlockOutports{j}.Name;
                         outportBlockName = thisBlockOutportBlocks{j}.Name;
                         outportLineName = thisBlockOutLines{j}.Name;
                         if ~isequal(outportLineName, '')
@@ -84,18 +77,18 @@ classdef subSysBlock
             end
             block = opts.block;
             portType = opts.portType;
-            block = myOp.slx.general.checkBlock(block);
+            block = myOp.slx.subSysBlock.checkBlock("block", block);
 
-            subSysBlcok = [];
+            subSysBlock = [];
             for i = 1:length(block)
                 thisBlock = block{i};
-                if myOp.slx.priTools.isSubsystem(thisBlock) || myOp.slx.priTools.isMatlabFunction(thisBlock)
-                    subSysBlcok = [subSysBlcok, thisBlock];
+                if myOp.slx.priTools.isSubsystem(thisBlock) || myOp.slx.matlabFunction.isMatlabFunction(thisBlock)
+                    subSysBlock = [subSysBlock, thisBlock];
                 end
             end
 
-            for i = 1:length(subSysBlcok)
-                thisBlock = subSysBlcok(i);
+            for i = 1:length(subSysBlock)
+                thisBlock = subSysBlock(i);
                 thisBlockInports = myOp.slx.block.getBlockPort("block", thisBlock, "portType", "Inport");
                 thisBlockOutports = myOp.slx.block.getBlockPort("block", thisBlock, "portType", "Outport");
                 thisBlockInportBlocks = find_system(thisBlock.Handle, 'SearchDepth', 1, 'FollowLinks', 'on', 'LookUnderMasks', 'all', 'BlockType', 'Inport');
@@ -119,7 +112,7 @@ classdef subSysBlock
                 if isequal(portType, 'Inport') || isequal(portType, '')
                     for j = 1:length(thisBlockInports)
                         inportBlockName = thisBlockInportBlocks{j}.Name;
-                        inportLineName = thisBlockInLines{j}.Name;
+                        inportLineName = myOp.slx.line.getPrpgtSigName("line", thisBlockInLines{j});
                         if ~isequal(inportLineName, '')
                             inportLineName = myOp.slx.line.normalizeName("name", inportLineName);
                         end
@@ -133,9 +126,8 @@ classdef subSysBlock
                 end
                 if isequal(portType, 'Outport') || isequal(portType, '')
                     for j = 1:length(thisBlockOutports)
-                        outportName = thisBlockOutports{j}.Name;
                         outportBlockName = thisBlockOutportBlocks{j}.Name;
-                        outportLineName = thisBlockOutLines{j}.Name;
+                        outportLineName = myOp.slx.line.getPrpgtSigName("line", thisBlockOutLines{j});
                         if ~isequal(outportLineName, '')
                             outportLineName = myOp.slx.line.normalizeName("name", outportLineName);
                         end
@@ -147,6 +139,56 @@ classdef subSysBlock
                         end
                     end
                 end
+            end
+        end
+
+        function portName_simplify(opts)
+
+            arguments
+                opts.block = '';
+            end
+            block = opts.block;
+            block = myOp.slx.subSysBlock.checkBlock(...
+                'block', block ...
+            );
+
+            subSysBlock = block;
+
+            for i = 1:length(subSysBlock)
+                thisBlock = subSysBlock(i);
+                portsBlock = myOp.slx.inOutPort.getAll("block", thisBlock);
+                for j = 1:length(portsBlock)
+                    thisPortBlock = portsBlock(j);
+                    portName = thisPortBlock.Name;
+                    simplePortName = myOp.slx.inOutPort.simplifyPortName(...
+                        'portName', portName ...
+                    );
+                    if ~strcmp(portName, simplePortName)
+                        try
+                            thisPortBlock.Name = simplePortName;
+                        catch
+                        end
+                    end
+                end
+            end
+        end
+    
+        function blocks = checkBlock(opts)
+        % CHECKBLOCK  检查并获取 subSystem 模块
+            arguments
+                opts.block = '';
+            end
+            blocks = myOp.slx.general.checkBlock(...
+                opts.block  ...
+            );
+            tempBlocks = blocks;
+            blocks = {};
+            for i = 1:length(tempBlocks)
+                thisBlock = tempBlocks{i};
+                if ~myOp.slx.priTools.isSubsystem(thisBlock)
+                    continue;
+                end
+                blocks{end+1} = thisBlock;
             end
         end
 

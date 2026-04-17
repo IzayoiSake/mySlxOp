@@ -70,7 +70,7 @@ classdef busBlock
                         'block', thisBlock.Handle, ...
                         'lineType', 'Outport' ...
                     );
-                    thisDataType = myOp.slx.line.line_getLineDataType("line", lines);
+                    thisDataType = myOp.slx.line.getLineDataType("line", lines);
                     dataType = [dataType; thisDataType];
                 end
                 % 如果是 Bus Creator
@@ -79,7 +79,7 @@ classdef busBlock
                         'block', thisBlock.Handle, ...
                         'lineType', 'Inport' ...
                     );
-                    thisDataType = myOp.slx.line.line_getLineDataType("line", lines);
+                    thisDataType = myOp.slx.line.getLineDataType("line", lines);
                     dataType = [dataType; thisDataType];
                 end
             end
@@ -126,5 +126,118 @@ classdef busBlock
             end
         end
         
+        function blocks = checkBlock(opts)
+        % CHECKBLOCK  检查指定模块是否为 Bus Selector 或 Bus Creator 模块
+            arguments
+                opts.block = '';
+            end
+
+            block = myOp.slx.general.checkBlock(opts.block);
+
+            blocks = {};
+            for i = 1:length(block)
+                thisBlock = block{i};
+                if strcmp(thisBlock.BlockType, 'BusSelector') || ...
+                   strcmp(thisBlock.BlockType, 'BusCreator')
+                    blocks{end+1} = thisBlock; %#ok<AGROW>
+                end
+            end
+            blocks = blocks(:);
+        end
+
+        function blocks = getAll(opts)
+        % GETALL  获取所有 Bus Selector 和 Bus Creator 模块
+            arguments
+                opts.block = '';
+            end
+            block = myOp.slx.general.checkBlock("block", opts.block);
+
+            blocks = {};
+            for i = 1:length(block)
+                thisBlock = block{i};
+                thisBusBlocks = myOp.slx.general.find_system(...
+                    thisBlock.Handle, ...
+                    'Type', 'Block' ...
+                );
+                if isempty(thisBusBlocks)
+                    continue;
+                end
+                thisBusBlocks = myOp.slx.busBlock.checkBlock(...
+                    'block', thisBusBlocks ...
+                );
+                blocks = [blocks; thisBusBlocks];
+            end
+            blocks = blocks(:);
+        end
+
+        function varargout = getSelectorSignalHierarchy(opts)
+            arguments
+                opts.block = '';
+            end
+            block = myOp.slx.busBlock.checkBlock("block", opts.block);
+            selectorBlocks = {};
+            
+            for i = 1:length(block)
+                thisBlock = block{i};
+                if strcmp(thisBlock.BlockType, 'BusSelector')
+                    selectorBlocks{end+1} = thisBlock;
+                    selectorBlocks = selectorBlocks(:);
+                end
+            end
+            block = selectorBlocks;
+            selectorSignalHierarchy = cell(length(block), 1);
+            for i = 1:length(block)
+                thisBlock = block{i};
+                lines = myOp.slx.block.getBlockLine(...
+                        'block', thisBlock.Handle, ...
+                        'lineType', 'Inport' ...
+                );
+                if isempty(lines)
+                    continue;
+                end
+                line = lines{1};
+                signalHierarchy = myOp.slx.line.checkSignalHierarchy("line", line);
+                selectorSignalHierarchy{i} = signalHierarchy{1};
+            end
+
+            if nargout == 1
+                varargout{1} = selectorSignalHierarchy;
+            else
+                blockId = myOp.slx.block.getId("block", block);
+                for i = 1:length(block)
+                    thisBlockId = blockId{i};
+                    thisSignalHierarchy = selectorSignalHierarchy{i};
+                    thisBlockIdName = strrep(thisBlockId, newline, " ");
+                    name = myhiliteCmd(thisBlockId, thisBlockIdName);
+                    num = myhiliteCmd(thisBlockId, string(i));
+                    msg = sprintf("%s. 模块: %s; 的信号结构:", num, name);
+                    disp(msg);
+                    disp(thisSignalHierarchy);
+                end
+            end
+        end
+
+        function varargout = upDateBusSelectorArray(opts)
+            arguments
+                opts.block = '';
+            end
+            block = myOp.slx.busBlock.checkBlock("block", opts.block);
+            blockSelector = {};
+            for i = 1:length(block)
+                thisBlock = block{i};
+                if strcmp(thisBlock.BlockType, 'BusSelector')
+                    blockSelector{end+1} = thisBlock;
+                    blockSelector = blockSelector(:);
+                    % busObj = evalin('base', extractAfter(thisBlock.OutDataTypeStr, 'Bus: '));
+                    % elementNames = {busObj.Elements.Name};
+                    % elementNamesStr = strjoin(elementNames, ',');
+                    % set_param(thisBlock.Handle, 'OutputSignals', elementNamesStr);
+                end
+            end
+            block = blockSelector;
+            % 获取 全部的模块的信号结构
+            
+        end
+
     end
 end

@@ -202,7 +202,7 @@ classdef block
         % 将一个block的输入信号线的名字转换为输出信号线的名字, 或者反之
             arguments
                 opts.block = '';
-                opts.direction = '';
+                opts.direction {mustBeMember(opts.direction, ["in2out"; "out2in"; ""])} = '';
             end
 
             block = opts.block;
@@ -230,16 +230,16 @@ classdef block
                         if isequal(inportName, outportName)
                             directions(j) = 'same';
                         elseif isempty(inportName)
-                            directions(j) = 'out';
+                            directions(j) = 'out2in';
                         elseif isempty(outportName)
-                            directions(j) = 'in';
+                            directions(j) = 'in2out';
                         elseif ~isempty(inportName) && ~isempty(outportName) && ~isequal(inportName, outportName)
                             directions(j) = 'conflict';
                         end
-                    elseif isequal(direction, 'in')
-                        directions(j) = 'in';
-                    elseif isequal(direction, 'out')
-                        directions(j) = 'out';
+                    elseif isequal(direction, 'in2out')
+                        directions(j) = 'in2out';
+                    elseif isequal(direction, 'out2in')
+                        directions(j) = 'out2in';
                     end
                 end
                 for j = 1:commenLen
@@ -254,7 +254,7 @@ classdef block
                     outport = outports(j);
                     inportName = inportNames{j};
                     outportName = outportNames{j};
-                    if strcmp(direction, 'in')
+                    if strcmp(direction, 'in2out')
                         newName = myOp.slx.line.normalizeName(name = inportName);
                         line = get_param(outport, 'Line');
                         set_param(line, 'Name', newName);
@@ -272,12 +272,10 @@ classdef block
             arguments
                 opts.block = '';
                 opts.portNum = 1;
-                opts.lookUnderMask = false;
             end
         
             block = opts.block;
             portNum = opts.portNum;
-            lookUnderMask = opts.lookUnderMask;
         
             % 处理 block
             block = myOp.slx.general.checkBlock(block);
@@ -293,9 +291,7 @@ classdef block
                 return;
             % 如果 block 是 From 模块
             elseif strcmp(block.BlockType, 'From')
-                tag = get_param(block.Handle, 'GotoTag');
-                fatherBlock = get_param(block.Handle, 'Parent');
-                gotoBlock = find_system(fatherBlock, 'SearchDepth', 1, 'BlockType', 'Goto', 'GotoTag', tag);
+                gotoBlock = myOp.slx.goFrom.getMatched("block", block);
         
                 if isempty(gotoBlock)
                     error('gotoBlock not found.');
@@ -316,22 +312,13 @@ classdef block
                 srcPortNum = {double(parentBlockPortNum)};
         
             % 处理 lookUnderMask 逻辑
-            elseif lookUnderMask
-                [srcBlock, srcPortNum] = myOp.slx.block.getLastBlock('block', block, 'portNum', portNum, 'lookUnderMask', false);
-                srcBlock = myOp.slx.general.checkBlock(srcBlock);
+            elseif myOp.slx.priTools.isSubsystem(block)
+                srcBlock = find_system(srcBlock.Handle, 'SearchDepth', 1, 'BlockType', 'Outport', 'Port', num2str(srcPortNum));
                 if isempty(srcBlock)
-                    error('No previous block found.');
+                    error('No Outport found in the SubSystem.');
                 end
-                srcBlock = srcBlock{1};  % 取第一个 block
-                srcPortNum = srcPortNum{1};  % 取第一个 portNum
-                if (strcmp(srcBlock.BlockType, 'SubSystem') && ~myOp.slx.priTools.isMatlabFunction(srcBlock))
-                    srcBlock = find_system(srcBlock.Handle, 'SearchDepth', 1, 'BlockType', 'Outport', 'Port', num2str(srcPortNum));
-                    if isempty(srcBlock)
-                        error('No Outport found in the SubSystem.');
-                    end
-                    srcBlock = myOp.slx.general.checkBlock(srcBlock);
-                    srcPortNum = num2cell(ones(length(srcBlock), 1)); % 端口号全为 1
-                end
+                srcBlock = myOp.slx.general.checkBlock(srcBlock);
+                srcPortNum = num2cell(ones(length(srcBlock), 1)); % 端口号全为 1
         
             % 其他情况：获取普通块的输入端口连接
             else
@@ -378,18 +365,15 @@ classdef block
 
         function [desBlock, desPortNum] = getNextBlock(opts)
             
-
             arguments
                 opts.block = gcbh;
                 opts.portNum = 1;
                 opts.desNum = 'all';
-                opts.lookUnderMask = false;
             end
 
             block = opts.block;
             portNum = opts.portNum;
             desNum = opts.desNum;
-            lookUnderMask = opts.lookUnderMask;
         
             % 处理 block
             block = myOp.slx.general.checkBlock(block);
@@ -406,12 +390,10 @@ classdef block
                 return;
             % 如果 block 是 Goto 模块
             elseif strcmp(block.BlockType, 'Goto')
-                tag = get_param(block.Handle, 'GotoTag');
-                fatherBlock = get_param(block.Handle, 'Parent');
-                fromBlock = find_system(fatherBlock, 'SearchDepth', 1, 'BlockType', 'From', 'GotoTag', tag);
+                fromBlock = myOp.slx.goFrom.getMatched("block", block);
         
                 if isempty(fromBlock)
-                    error('fromBlock not found.');
+                    return;
                 end
         
                 fromBlock = myOp.slx.general.checkBlock(fromBlock);
@@ -433,14 +415,14 @@ classdef block
                 [desBlock, desPortNum] = myOp.slx.block.getNextBlock('block', block, 'portNum', portNum, 'desNum', desNum, 'lookUnderMask', false);
                 desBlock = myOp.slx.general.checkBlock(desBlock);
                 if isempty(desBlock)
-                    error('No next block found.');
+                    return;
                 end
                 tempBlock = desBlock{1};  % 取第一个 block
                 tempPortNum = desPortNum{1};  % 取第一个端口号
-                if strcmp(tempBlock.BlockType, 'SubSystem') && ~myOp.slx.priTools.isMatlabFunction(tempBlock)
+                if strcmp(tempBlock.BlockType, 'SubSystem') && ~myOp.slx.matlabFunction.isMatlabFunction(tempBlock)
                     tempBlock = find_system(tempBlock.Handle, 'SearchDepth', 1, 'BlockType', 'Inport', 'Port', num2str(tempPortNum));
                     if isempty(tempBlock)
-                        error('No Inport found in the SubSystem.');
+                        return;
                     end
                     desBlock = myOp.slx.general.checkBlock(tempBlock);
                     desPortNum = num2cell(ones(length(tempBlock), 1)); % 端口号全为 1
@@ -501,6 +483,236 @@ classdef block
             end
             if ~iscell(desPortNum)
                 desPortNum = {desPortNum};
+            end
+        end
+
+        function [blocks] = getAll(opts)
+        % GETALL  获取所有模块
+            arguments
+                opts.block = '';
+            end
+            block = myOp.slx.general.checkBlock(opts.block);
+
+            blocks = {};
+            for i = 1:length(block)
+                thisBlock = block{i};
+                thisBlocks = myOp.slx.general.find_system(...
+                    thisBlock.Handle, ...
+                    'Type', 'Block' ...
+                );
+                if isempty(thisBlocks)
+                    continue;
+                end
+                thisBlocks = myOp.slx.general.checkBlock(...
+                    thisBlocks ...
+                );
+                blocks = [blocks; thisBlocks];
+            end
+        end
+
+        function varargout = getSampleTime(opts)
+            arguments
+                opts.block = '';
+            end
+            for i = 1:nargout
+                varargout{i} = [];
+            end
+            block = myOp.slx.general.checkBlock(opts.block);
+            sampleTimes = cell(length(block), 1);
+            for i = 1:length(block)
+                thisBlock = block{i};
+                sampleTime = get_param(thisBlock.Handle, 'CompiledSampleTime');
+                if isequal(sampleTime, [-1, -1])
+                    % 有可能是个Chart里面的子块, 一步步寻找父块的采样时间
+                    searchBlock = thisBlock;
+                    while true
+                        searchBlock = get_param(searchBlock.Handle, 'Parent');
+                        if isempty(searchBlock)
+                            thisBlockPath = getfullname(thisBlock.Handle);
+                            msg = myhiliteCmd(thisBlockPath, thisBlockPath);
+                            warning('⚠️ 无法找到块 %s 的采样时间', msg);
+                            break;
+                        end
+                        searchBlock = get_param(searchBlock, 'object');
+                        isChart = myOp.slx.priTools.isChart(searchBlock);
+                        if isChart
+                            sampleTime = get_param(searchBlock.Handle, 'CompiledSampleTime');
+                            if isequal(sampleTime, [-1, -1])
+                                continue;
+                            else
+                                break;
+                            end
+                        else
+                            continue;
+                        end
+                    end
+                end
+                sampleTimes{i} = sampleTime;
+            end
+            if nargout == 1
+                varargout{1} = sampleTimes;
+            elseif nargout == 2
+                msgAll = [];
+                for i = 1:length(block)
+                    thisBlock = block{i};
+                    sampleTime = sampleTimes{i};
+                    thisBlockPath = getfullname(thisBlock.Handle);
+                    idx = myhiliteCmd(thisBlockPath, string(i));
+                    msg = myhiliteCmd(thisBlockPath, thisBlockPath);
+                    msg = append('🌙 ', msg, ' 的采样时间: ', mat2str(sampleTime));
+                    msg = append(idx, '. ', msg);
+                    msgAll = append(msgAll, msg, newline);
+                end
+                varargout{1} = sampleTimes;
+                varargout{2} = msgAll;
+            else
+                for i = 1:length(block)
+                    thisBlock = block{i};
+                    sampleTime = sampleTimes{i};
+                    thisBlockPath = getfullname(thisBlock.Handle);
+                    idx = myhiliteCmd(thisBlockPath, string(i));
+                    msg = myhiliteCmd(thisBlockPath, thisBlockPath);
+                    msg = append('🌙 ', msg, ' 的采样时间: ', mat2str(sampleTime));
+                    msg = append(idx, '. ', msg);
+                    disp(msg);
+                end
+            end
+                
+        end
+        
+        function ids = getId(opts)
+        % GETID  获取模块的唯一标识符
+            arguments
+                opts.block = '';
+            end
+            block = myOp.slx.general.checkBlock(opts.block);
+
+            ids = cell(length(block), 1);
+            for i = 1:length(block)
+                thisBlock = block{i};
+                % 绝对路径
+                path = thisBlock.Path;
+                name = thisBlock.Name;
+                id = append(path, '/', name);
+                id = string(id);
+                ids{i} = id;
+            end
+        end
+
+        function varargout = sortByPosition(opts)
+        % SORTBYPOSITION  根据模块在 Simulink 模型中的位置对模块进行排序
+            arguments
+                opts.block = '';
+            end
+            block = myOp.slx.general.checkBlock(opts.block);
+
+            if isempty(block)
+                if nargout == 1
+                    varargout{1} = {};
+                end
+                return;
+            end
+
+            positions = zeros(length(block), 4);
+            for i = 1:length(block)
+                thisBlock = block{i};
+                position = get_param(thisBlock.Handle, 'Position');
+                positions(i, :) = position;
+            end
+            % 获取全部模块最左侧和最顶部的位置
+            leftPos = min(positions(:, 1));
+            topPos = min(positions(:, 2));
+            originPoint = [leftPos, topPos];
+            % 计算每个模块的中心位置
+            centerPos = [positions(:, 1) + positions(:, 3) / 2, positions(:, 2) + positions(:, 4) / 2];
+            % 计算每个模块中心位置与最左上角位置的距离
+            distances = sqrt((centerPos(:, 1) - originPoint(1)).^2 + (centerPos(:, 2) - originPoint(2)).^2);
+            % 根据距离对模块进行排序
+            [~, sortIdx] = sort(distances);
+            sortBlocks = block(sortIdx);
+            if nargout == 1
+                varargout{1} = sortBlocks;
+            else
+                sortBlockIds = myOp.slx.block.getId('block', sortBlocks);
+                for i = 1:length(sortBlockIds)
+                    displayName = strrep(string(sortBlockIds{i}), newline, ' ');
+                    msg = myhiliteCmd(sortBlockIds{i}, displayName);
+                    serialNum = myhiliteCmd(sortBlockIds{i}, string(i));
+                    msg = append(serialNum, '. ', msg);
+                    disp(msg);
+                end
+            end
+        end
+    
+        function varargout = changeValue(opts)
+        % CHANGEVALUE  修改模块的参数值
+            arguments
+                opts.block = '';
+                opts.parName = '';
+                opts.parValueReplace = '';
+                opts.parValue = '';
+                opts.scope {mustBeMember(opts.scope, {'current'; 'all'})} = 'current';
+            end
+            if isequal(opts.scope, 'current')
+                block = myOp.slx.general.checkBlock(opts.block);
+            else
+                block = myOp.slx.block.getAll('block', opts.block);
+            end
+            parName = opts.parName;
+            parValueReplace = opts.parValueReplace;
+            parValue = opts.parValue;
+            if isequal(parName, '') && isequal(parValueReplace, '')
+                error('请至少指定 parName 或 parValueReplace 中的一个参数。');
+            end
+
+            for i = 1:length(block)
+                thisBlock = block{i};
+                try
+                    if isequal(parValueReplace, '')
+                        oldParValue = get_param(thisBlock.Handle, parName);
+                        newParValue = parValue;
+                        if isequal(oldParValue, newParValue)
+                            continue;
+                        end
+                        set_param(thisBlock.Handle, parName, parValue);
+                    elseif isequal(parName, '')
+                        prop = properties(thisBlock.Handle);
+                        for j = 1:length(prop)
+                            propName = prop{j};
+                            try
+                                oldParValue = get_param(thisBlock.Handle, propName);
+                                newParValue = strrep(oldParValue, parValueReplace, parValue);
+                                if isequal(oldParValue, newParValue)
+                                    continue;
+                                end
+                                set_param(thisBlock.Handle, propName, parValue);
+                                id = myOp.slx.block.getId('block', thisBlock);
+                                msg = myhiliteCmd(id, id);
+                                msg = append('✅ 已将模块 ', msg, ' 的参数 ', propName, ' 从 ', parValueReplace, ' 修改为 ', parValue);
+                                disp(msg);
+                            catch
+                                continue;
+                            end
+                        end
+                    else
+                        oldParValue = get_param(thisBlock.Handle, parName);
+                        newParValue = strrep(oldParValue, parValueReplace, parValue);
+                        if isequal(oldParValue, newParValue)
+                            continue;
+                        end
+                        set_param(thisBlock.Handle, parName, newParValue);
+                    end 
+                    id = myOp.slx.block.getId('block', thisBlock);
+                    msg = myhiliteCmd(id, id);
+                    msg = append('✅ 已将模块 ', msg, ' 的参数 ', parName, ' 从 ', oldParValue, ' 修改为 ', newParValue);
+                    disp(msg);
+                catch ME
+                    warning(ME.identifier, '%s', ME.message);
+                    id = myOp.slx.block.getId('block', thisBlock);
+                    msg = myhiliteCmd(id, id);
+                    msg = append('⚠️ 无法修改模块 ', msg, ' 的参数 ', parName);
+                    disp(msg);
+                end
             end
         end
 

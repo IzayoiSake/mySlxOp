@@ -181,20 +181,7 @@ classdef priTools
         end
 
         function isMatlabFunction = isMatlabFunction(block)
-            block = myOp.slx.general.parseBlock(block);
-            isMatlabFunction = false;
-            temp = mat2cell(false(length(block), 1), ones(1, numel(block)));
-            for i = 1:length(block)
-                thisBlock = block{i};
-                if strcmp(thisBlock.BlockType, 'SubSystem')
-                    if (strcmp(thisBlock.ErrorFcn, 'Stateflow.Translate.translate'))
-                        temp{i} = true;
-                    end
-                end
-            end
-            if all(cell2mat(temp))
-                isMatlabFunction = true;
-            end
+            isMatlabFunction = myOp.slx.matlabFunction.isMatlabFunction(block);
         end
 
         function isSubsystem = isSubsystem(block)
@@ -203,8 +190,12 @@ classdef priTools
             temp = mat2cell(false(length(block), 1), ones(1, numel(block)));
             for i = 1:length(block)
                 thisBlock = block{i};
-                if strcmp(thisBlock.BlockType, 'SubSystem') && ~myOp.slx.priTools.isMatlabFunction(thisBlock)
-                    temp{i} = true;
+                if isprop(thisBlock, 'BlockType')
+                    if strcmp(thisBlock.BlockType, 'SubSystem')
+                        if strcmp(thisBlock.SFBlockType, 'NONE') && strcmp(thisBlock.MaskType, '')
+                            temp{i} = true;
+                        end
+                    end
                 end
             end
             if all(cell2mat(temp))
@@ -218,14 +209,35 @@ classdef priTools
             temp = mat2cell(false(length(block), 1), ones(1, numel(block)));
             for i = 1:length(block)
                 thisBlock = block{i};
-                try
-                    sltest.testsequence.findSymbol(thisBlock.getFullName());
-                    temp{i} = true;
-                catch
+                if isprop(thisBlock, 'BlockType')
+                    if strcmp(thisBlock.BlockType, 'SubSystem')
+                        if strcmp(thisBlock.SFBlockType, 'Test Sequence')
+                            temp{i} = true;
+                        end
+                    end
                 end
             end
             if all(cell2mat(temp))
                 isTestSequence = true;
+            end
+        end
+
+        function isChart = isChart(block)
+            block = myOp.slx.general.parseBlock(block);
+            isChart = false;
+            temp = mat2cell(false(length(block), 1), ones(1, numel(block)));
+            for i = 1:length(block)
+                thisBlock = block{i};
+                if isprop(thisBlock, 'BlockType')
+                    if strcmp(thisBlock.BlockType, 'SubSystem')
+                        if strcmp(thisBlock.SFBlockType, 'Chart')
+                            temp{i} = true;
+                        end
+                    end
+                end
+            end
+            if all(cell2mat(temp))
+                isChart = true;
             end
         end
 
