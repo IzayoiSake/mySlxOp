@@ -40,6 +40,23 @@ classdef path
             defaultPathCell = myOp.path.getDefaultPath();
             % 获取已更改的路径
             changedPathCell = setdiff(currentPathCell, defaultPathCell, 'stable');
+            
+            % 排除特殊路径（可扩展的模式匹配）
+            excludePatterns = { ...
+                '\\.vscode\\extensions\\', ...
+                '\\MathWorks\\MATLAB Add-Ons\\', ...
+                '\\.matlab\\agentic-toolkits\\'
+            };
+            
+            % 使用正则匹配进行过滤
+            if ~isempty(changedPathCell)
+                % 将模式组合成一个正则表达式 (pattern1|pattern2|...)
+                combinedPattern = strjoin(excludePatterns, '|');
+                % 找到匹配的索引并剔除
+                isExcluded = ~cellfun(@isempty, regexp(changedPathCell, combinedPattern, 'once'));
+                changedPathCell(isExcluded) = [];
+            end
+            
             paths = changedPathCell;
         end
 

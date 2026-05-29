@@ -300,5 +300,128 @@ classdef goFrom
             end
         end
 
+        function varargout = checkBlock(opts)
+            arguments
+                opts.block = '';
+            end
+            block = opts.block;
+            block = myOp.slx.general.checkBlock(block);
+            if isempty(block)
+                varargout{1} = {};
+                return;
+            end
+            validBlocks = {};
+            for i = 1:length(block)
+                thisBlock = block{i};
+                if strcmp(thisBlock.BlockType, 'Goto') || strcmp(thisBlock.BlockType, 'From')
+                    validBlocks{end+1} = thisBlock;
+                    validBlocks = validBlocks(:);
+                end
+            end
+            if nargout == 1
+                varargout{1} = validBlocks;
+            else
+                for i = 1:length(validBlocks)
+                    thisBlock = validBlocks{i};
+                    id = myOp.slx.block.getId("block", thisBlock);
+                    cmd = myhiliteCmd(id, id);
+                    idxString = myhiliteCmd("idx", string(i));
+                    type = get_param(thisBlock.Handle, 'BlockType');
+                    msg = append(idxString, ". ", string(type), "模块: ", cmd);
+                    disp(msg);
+                end
+            end
+            
+        end
+
+        function varargout = getAll(opts)
+        % GETALL  获取系统中所有的 GoTo / From 模块
+            arguments
+                opts.block = '';
+                opts.searchDepth = Inf;
+            end
+            block = myOp.slx.general.checkBlock(opts.block);
+            blocks = {};
+            for i = 1:length(block)
+                thisBlock = block{i};
+                thisBlocks = myOp.slx.general.find_system(...
+                    thisBlock.Handle, ...
+                    'SearchDepth', opts.searchDepth, ...
+                    'Type', 'Block' ...
+                );
+                if isempty(thisBlocks)
+                    continue;
+                end
+                thisBlocks = myOp.slx.goFrom.checkBlock(...
+                    'block', thisBlocks ...
+                );
+                blocks = [blocks; thisBlocks];
+            end
+            blocks = blocks(:);
+            if nargout == 1
+                varargout{1} = blocks;
+            else
+                for i = 1:length(blocks)
+                    thisBlock = blocks{i};
+                    id = myOp.slx.block.getId("block", thisBlock);
+                    cmd = myhiliteCmd(id, id);
+                    idxString = myhiliteCmd("idx", string(i));
+                    type = get_param(thisBlock.Handle, 'BlockType');
+                    msg = append(idxString, ". ", string(type), "模块: ", cmd);
+                    disp(msg);
+                end
+            end
+        end
+
+        function varargout = setWH(opts)
+        % SETWH  设置 Constant 模块的宽高
+            arguments
+                opts.block = '';
+                opts.width = 180;
+                opts.height = 24;
+                opts.searchDepth = Inf;
+            end
+            blocks = myOp.slx.goFrom.getAll(...
+                'block', opts.block, ...
+                'searchDepth', opts.searchDepth ...
+            );
+
+            blockIds = myOp.slx.block.getId(...
+                'block', blocks ...
+            );
+            for i = 1:length(blocks)
+                thisBlock = blocks{i};
+                pos = get_param(thisBlock.Handle, 'Position');
+                midX = (pos(1) + pos(3)) / 2;
+                midY = (pos(2) + pos(4)) / 2;
+                width = opts.width;
+                height = opts.height;
+                if width <= 0
+                    width = pos(3) - pos(1);
+                end
+                if height <= 0
+                    height = pos(4) - pos(2);
+                end
+                newPos = [midX - width/2, midY - height/2, midX + width/2, midY + height/2];
+                set_param(thisBlock.Handle, 'Position', newPos);
+            end
+            if nargout == 1
+                varargout{1} = blocks;
+            else
+                for i = 1:length(blocks)
+                    thisBlock = blocks{i};
+                    id = myOp.slx.block.getId("block", thisBlock);
+                    cmd = myhiliteCmd(id, id);
+                    idxString = myhiliteCmd("idx", string(i));
+                    type = get_param(thisBlock.Handle, 'BlockType');
+                    pos = get_param(thisBlock.Handle, 'Position');
+                    width = pos(3) - pos(1);
+                    height = pos(4) - pos(2);
+                    msg = append(idxString, ". ", string(type), "模块: ", cmd, " 已设置宽高为 ", num2str(width), " x ", num2str(height), "。");
+                    disp(msg);
+                end
+            end
+        end
+
     end
 end

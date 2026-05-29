@@ -27,7 +27,7 @@ classdef simLog
             % 获取当前模型的所有线
             allLines = find_system(topModelPath, 'FindAll', 'on', 'type', 'line');
             allLines = myOp.slx.general.checkLine(allLines);
-            fullId = myOp.slx.line.getLineFullId('line', allLines);
+            fullId = myOp.slx.line.getId('line', allLines);
 
             % 获取当前模型中的所有matlab function模块的端口信息
             matlabFunction.blocks = myOp.slx.matlabFunction.getAll("block", topModelPath);

@@ -166,6 +166,8 @@ classdef general
                         portObj = portObj{1};
                         lineHandle = get_param(portObj.Handle, 'Line');
                         line{i} = get_param(lineHandle, 'Object');
+                    else
+                        error("无效的Line名字");
                     end
                 else
                     error("无效的Line");

@@ -163,6 +163,7 @@ classdef RateTransition
         % GETALL  获取所有 Rate Transition 模块
             arguments
                 opts.block = '';
+                opts.searchDepth = Inf;
             end
             block = myOp.slx.general.checkBlock(opts.block);
 
@@ -171,6 +172,7 @@ classdef RateTransition
                 thisBlock = block{i};
                 thisRtBlocks = myOp.slx.general.find_system(...
                     thisBlock.Handle, ...
+                    'SearchDepth', opts.searchDepth, ...
                     'Type', 'Block' ...
                 );
                 if isempty(thisRtBlocks)

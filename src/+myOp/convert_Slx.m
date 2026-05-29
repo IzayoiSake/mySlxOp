@@ -309,7 +309,7 @@ function [targetFilePathList, isOk, myTempDirOut] = exportSlxAll(d, filePathsToC
 
     % 检测是否已经打开了 parfor 的并行池，如果没有就创建一个
     if length(filePathsToConvert) >= 4
-        needParfor = true;
+        needParfor = false;
     else
         needParfor = false;
     end

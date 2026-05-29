@@ -177,6 +177,7 @@ classdef subSysBlock
         % CHECKBLOCK  检查并获取 subSystem 模块
             arguments
                 opts.block = '';
+                opts.subType {mustBeMember(opts.subType, {'', 'ForEach', 'ModelReference'})} = '';
             end
             blocks = myOp.slx.general.checkBlock(...
                 opts.block  ...
@@ -190,6 +191,51 @@ classdef subSysBlock
                 end
                 blocks{end+1} = thisBlock;
             end
+            if isequal(opts.subType, 'ForEach')
+                idx = false(length(blocks), 1);
+                for i = 1:length(blocks)
+                    thisBlock = blocks{i};
+                    forEachBlocks = myOp.slx.general.find_system(...
+                        thisBlock.Handle, ...
+                        'searchDepth', 1, ...
+                        'BlockType', 'ForEach' ...
+                    );
+                    if ~isempty(forEachBlocks)
+                        idx(i) = true;
+                    end
+                end
+                blocks = blocks(idx);
+            end
+            blocks = blocks(:);
+        end
+
+        function blocks = getAll(opts)
+        % GETALL  获取所有 subSystem 模块
+            arguments
+                opts.block = '';
+                opts.searchDepth = Inf;
+                opts.subType {mustBeMember(opts.subType, {'', 'ForEach', 'ModelReference'})} = '';
+            end
+            block = myOp.slx.general.checkBlock(opts.block);
+
+            blocks = {};
+            for i = 1:length(block)
+                thisBlock = block{i};
+                thisBlocks = myOp.slx.general.find_system(...
+                    thisBlock.Handle, ...
+                    'SearchDepth', opts.searchDepth, ...
+                    'Type', 'Block' ...
+                );
+                if isempty(thisBlocks)
+                    continue;
+                end
+                thisBlocks = myOp.slx.subSysBlock.checkBlock(...
+                    'block', thisBlocks, ...
+                    'subType', opts.subType ...
+                );
+                blocks = [blocks; thisBlocks];
+            end
+            blocks = blocks(:);
         end
 
     end

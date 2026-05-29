@@ -9,6 +9,7 @@ function cmdStr = myhiliteCmd(hyperLink, displayName)
         % cmdPath = strrep(hyperLink, newline, ''' newline ''');
         cmdPath = strrep(string(hyperLink), newline, ' ');
         cmdPath = strrep(cmdPath, "'", "''");
+        displayName = strrep(string(displayName), newline, ' ');
         cmdStr = sprintf('<a href="matlab:myhilite(''%s'')">%s</a>', string(cmdPath), string(displayName));
     elseif ishandle(hyperLink) && isnumeric(hyperLink)
         cmdStr = sprintf('<a href="matlab:myhilite([%.64g])">%s</a>', hyperLink, string(displayName));

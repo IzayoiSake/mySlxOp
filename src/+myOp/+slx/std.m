@@ -64,19 +64,25 @@ classdef std
             if (evalin('base', codeStr) == 0)
                 assignin('base', name, param);
             elseif force
-                warning('Variable %s already exists. Force Overwriting it.', name);
+                msgH = sprintf('<a href="matlab:eval(''%s'')">%s</a>', string(name), string(name));
+                msg = append("变量 ", msgH, " 已存在. 强制覆盖它.");
+                disp(msg);
                 assignin('base', name, param);
             else
                 if (choiceAll == 1 && (nowTimeSeconds - lastTimeSeconds) < seconds(5))
-                    warning('Variable %s already exists. But choose to overwrite it.', name);
+                    msgH = sprintf('<a href="matlab:eval(''%s'')">%s</a>', string(name), string(name));
+                    msg = append("变量 ", msgH, " 已存在. 选择覆盖它.");
+                    disp(msg);
                     assignin('base', name, param);
                 elseif (choiceAll == -1 && (nowTimeSeconds - lastTimeSeconds) < seconds(5))
-                    warning('Variable %s already exists. But choose not to overwrite it.', name);
+                    msgH = sprintf('<a href="matlab:eval(''%s'')">%s</a>', string(name), string(name));
+                    msg = append("变量 ", msgH, " 已存在. 选择不覆盖它.");
+                    disp(msg);
                 else
                     choiceAll = int16(0);
                     evalin('base', name)
-                    questStr = append("Variable ", name, " already exists. Do you want to overwrite it?");
-                    choice = menu(questStr, 'AllYes', 'AllNo', 'Yes', 'No');
+                    questStr = append("变量 ", name, " 已存在. 是否覆盖?                                ");
+                    choice = myOp.slx.std.menuCentered(questStr, {'AllYes', 'AllNo', 'Yes', 'No'});
                     switch choice
                         case 1
                             choiceAll = int16(1);
@@ -118,7 +124,12 @@ classdef std
             end
 
             if isempty(headerName)
-                headerName = getfullname(bdroot);
+                % headerName = getfullname(bdroot);
+                headerName_h = '';
+                headerName_c = '';
+            else
+                headerName_h = append(headerName, ".h");
+                headerName_c = append(headerName, ".c");
             end
 
             % 创建 Simulink.Signal
@@ -126,8 +137,8 @@ classdef std
             param.DataType = dataType;
             param.CoderInfo.StorageClass = 'Custom';
             param.CoderInfo.CustomStorageClass = 'ExportToFile';
-            param.CoderInfo.CustomAttributes.HeaderFile = append(headerName, ".h");
-            param.CoderInfo.CustomAttributes.DefinitionFile = append(headerName, ".c");
+            param.CoderInfo.CustomAttributes.HeaderFile = headerName_h;
+            param.CoderInfo.CustomAttributes.DefinitionFile = headerName_c;
 
 
             persistent choiceAll;
@@ -144,19 +155,25 @@ classdef std
             if (evalin('base', codeStr) == 0)
                 assignin('base', name, param);
             elseif force
-                warning('Variable %s already exists. Force Overwriting it.', name);
+                msgH = sprintf('<a href="matlab:eval(''%s'')">%s</a>', string(name), string(name));
+                msg = append("变量 ", msgH, " 已存在. 强制覆盖它.");
+                disp(msg);
                 assignin('base', name, param);
             else
                 if (choiceAll == 1 && (nowTimeSeconds - lastTimeSeconds) < seconds(5))
-                    warning('Variable %s already exists. But choose to overwrite it.', name);
+                    msgH = sprintf('<a href="matlab:eval(''%s'')">%s</a>', string(name), string(name));
+                    msg = append("变量 ", msgH, " 已存在. 选择覆盖它.");
+                    disp(msg);
                     assignin('base', name, param);
                 elseif (choiceAll == -1 && (nowTimeSeconds - lastTimeSeconds) < seconds(5))
-                    warning('Variable %s already exists. But choose not to overwrite it.', name);
+                    msgH = sprintf('<a href="matlab:eval(''%s'')">%s</a>', string(name), string(name));
+                    msg = append("变量 ", msgH, " 已存在. 选择不覆盖它.");
+                    disp(msg);
                 else
                     choiceAll = int16(0);
                     evalin('base', name)
-                    questStr = append("Variable ", name, " already exists. Do you want to overwrite it?");
-                    choice = menu(questStr, 'AllYes', 'AllNo', 'Yes', 'No');
+                    questStr = append("变量 ", name, " 已存在. 是否覆盖?                               ");
+                    choice = myOp.slx.std.menuCentered(questStr, {'AllYes', 'AllNo', 'Yes', 'No'});
                     switch choice
                         case 1
                             choiceAll = int16(1);
@@ -246,6 +263,61 @@ classdef std
                 return;
             end
         end
+
+        function choice = menuCentered(questStr, labels)
+        % 显示一个居中在屏幕的模态对话框，返回所选按钮索引
+            if nargin < 2 || isempty(labels)
+                labels = {"OK"};
+            end
+            if ~iscell(labels)
+                labels = cellstr(labels);
+            end
+
+            screenSize = get(0, 'ScreenSize'); % [left bottom width height]
+            dlgW = max(300, 120 * numel(labels));
+            dlgH = 120;
+            posX = floor((screenSize(3) - dlgW) / 2);
+            posY = floor((screenSize(4) - dlgH) / 2);
+
+            % f = figure("Visible", "off");
+            d = dialog('Name', questStr, 'WindowStyle', 'modal', ...
+                'Position', [posX posY dlgW dlgH], ...
+                'CloseRequestFcn', @(s,e) onClose());
+            uicontrol('Parent', d, 'Style', 'text', 'String', questStr, 'HorizontalAlignment', 'center', 'Position', [10 dlgH-60 dlgW-20 40]);
+
+            btnGap = 10;
+            totalGap = (numel(labels) + 1) * btnGap;
+            btnW = floor((dlgW - totalGap) / numel(labels));
+            btnH = 30;
+            btnY = 10;
+            btnX = btnGap;
+
+            choice = 0;
+            for i = 1:numel(labels)
+                uicontrol('Parent', d, 'Style', 'pushbutton', 'String', labels{i}, 'Position', [btnX btnY btnW btnH], 'Callback', @(s,e) onClick(i));
+                btnX = btnX + btnW + btnGap;
+            end
+
+            function onClick(idx)
+                choice = idx;
+                uiresume(d);
+            end
+
+            function onClose()
+                choice = 0;
+                uiresume(d);
+            end
+
+            uiwait(d);
+            if isvalid(d)
+                delete(d);
+            end
+            drawnow;
+            if desktop('-inuse')
+                commandwindow;
+            end
+            % close(f);
+        end
     
         function ctParDataType = getCtParDataType()
         %   获取 Simulink 的标定参数的数据类型
@@ -318,6 +390,53 @@ classdef std
             [~, idx] = sortrows([parsFirst, parsSecond, parsThird]);
 
             parNames = parNames(idx);
+        end
+
+        function varargout = createStdBus(opts)
+        % 创建总线
+            arguments
+                opts.name {mustBeText} = '';
+                opts.elementNames = [];
+                opts.elementTypes = [];
+                opts.elementDimensions = [];
+                opts.headerName = append(getfullname(bdroot), "_Bus");
+            end
+            
+            bus = Simulink.Bus;
+            bus.DataScope = "Exported";
+            bus.HeaderFile = append(opts.headerName, ".h");
+
+            if ~isempty(opts.elementNames) || ~isempty(opts.elementTypes) || ~isempty(opts.elementDimensions)
+                if length(opts.elementNames) ~= length(opts.elementTypes) || length(opts.elementNames) ~= length(opts.elementDimensions)
+                    error("createStdBus: 元素名称, 类型, 维度, 的长度必须相同.");
+                end
+                if ~isempty(opts.elementNames)
+                    bus.Elements = Simulink.BusElement.empty(length(opts.elementNames), 0);
+                    for i = 1:length(opts.elementNames)
+                        bus.Elements(i) = Simulink.BusElement;
+                        bus.Elements(i).Name = opts.elementNames{i};
+                    end
+                end
+                if ~isempty(opts.elementTypes)
+                    for i = 1:length(opts.elementTypes)
+                        bus.Elements(i).DataType = opts.elementTypes{i};
+                    end
+                end
+                if ~isempty(opts.elementDimensions)
+                    for i = 1:length(opts.elementDimensions)
+                        bus.Elements(i).Dimensions = opts.elementDimensions{i};
+                    end
+                end
+            end
+            if nargout == 1
+                varargout{1} = bus;
+            else
+                if isequal(opts.name, '')
+                    error("createStdBus: 当没有输出参数时, name 不能为空.");
+                else
+                    assignin('base', opts.name, bus);
+                end
+            end
         end
 
     end

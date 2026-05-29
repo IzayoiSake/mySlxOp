@@ -258,10 +258,15 @@ classdef block
                         newName = myOp.slx.line.normalizeName(name = inportName);
                         line = get_param(outport, 'Line');
                         set_param(line, 'Name', newName);
+                        id = myOp.slx.block.getId("block", thisBlock);
+                        msg = append("✅️ 已将 block '", myhiliteCmd(id, id), "' 的第 ", num2str(j), " 个 <输入端口> 的名字 '", inportName, "' 传递给 <输出信号线>。");
+                        disp(msg);
                     else
                         newName = myOp.slx.line.normalizeName(name = outportName);
                         line = get_param(inport, 'Line');
                         set_param(line, 'Name', newName);
+                        msg = append("✅️ 已将 block '", myhiliteCmd(id, id), "' 的第 ", num2str(j), " 个 <输出端口> 的名字 '", outportName, "' 传递给 <输入信号线>。");
+                        disp(msg);
                     end
                 end
             end
@@ -272,10 +277,12 @@ classdef block
             arguments
                 opts.block = '';
                 opts.portNum = 1;
+                opts.lookUnderMask = true;
             end
         
             block = opts.block;
             portNum = opts.portNum;
+            lookUnderMask = opts.lookUnderMask;
         
             % 处理 block
             block = myOp.slx.general.checkBlock(block);
@@ -312,13 +319,20 @@ classdef block
                 srcPortNum = {double(parentBlockPortNum)};
         
             % 处理 lookUnderMask 逻辑
-            elseif myOp.slx.priTools.isSubsystem(block)
-                srcBlock = find_system(srcBlock.Handle, 'SearchDepth', 1, 'BlockType', 'Outport', 'Port', num2str(srcPortNum));
+            elseif lookUnderMask
+                [srcBlock, srcPortNum] = myOp.slx.block.getLastBlock('block', block, 'portNum', portNum, 'lookUnderMask', false);
                 if isempty(srcBlock)
                     error('No Outport found in the SubSystem.');
                 end
+                if myOp.slx.priTools.isSubsystem(srcBlock)
+                    srcBlock = find_system(srcBlock.Handle, 'SearchDepth', 1, 'BlockType', 'Outport', 'Port', num2str(srcPortNum));
+                    if isempty(srcBlock)
+                        error('No Outport found in the SubSystem.');
+                    end
+                    srcPortNum = num2cell(ones(length(srcBlock), 1)); % 端口号全为 1
+                end
+                
                 srcBlock = myOp.slx.general.checkBlock(srcBlock);
-                srcPortNum = num2cell(ones(length(srcBlock), 1)); % 端口号全为 1
         
             % 其他情况：获取普通块的输入端口连接
             else
@@ -490,6 +504,7 @@ classdef block
         % GETALL  获取所有模块
             arguments
                 opts.block = '';
+                opts.searchDepth = Inf;
             end
             block = myOp.slx.general.checkBlock(opts.block);
 
@@ -498,6 +513,7 @@ classdef block
                 thisBlock = block{i};
                 thisBlocks = myOp.slx.general.find_system(...
                     thisBlock.Handle, ...
+                    'SearchDepth', opts.searchDepth, ...
                     'Type', 'Block' ...
                 );
                 if isempty(thisBlocks)
@@ -580,8 +596,7 @@ classdef block
                 
         end
         
-        function ids = getId(opts)
-        % GETID  获取模块的唯一标识符
+        function varargout = getId(opts)
             arguments
                 opts.block = '';
             end
@@ -596,6 +611,18 @@ classdef block
                 id = append(path, '/', name);
                 id = string(id);
                 ids{i} = id;
+            end
+            if nargout == 1
+                varargout{1} = ids;
+            else
+                for i = 1:length(block)
+                    thisBlock = block{i};
+                    id = ids{i};
+                    msg = myhiliteCmd(id, id);
+                    sNum = myhiliteCmd(id, string(i));
+                    msg = append(sNum, '. ', msg);
+                    disp(msg);
+                end
             end
         end
 

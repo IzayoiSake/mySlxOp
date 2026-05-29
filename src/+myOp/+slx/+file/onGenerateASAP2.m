@@ -56,7 +56,14 @@ function onGenerateASAP2(opts)
         searchObjectPattern = '([ \t]*)<Object[^>]*ClassName="Simulink\.ERTTargetCC"[^>]*>';
         for i = 1:length(xmlFiles)
             xmlPath = fullfile(simulinkDir, xmlFiles(i).name);
-            txt = fileread(xmlPath);
+            while true
+                try
+                    txt = fileread(xmlPath);
+                    break; % 读取成功，跳出循环
+                catch
+                    pause(0.1); % 等待 100ms 后重试，避免文件被占用时的读取错误
+                end
+            end
             
             if ~isempty(regexp(txt, searchPattern, 'once'))
                 % 场景 A: 节点已存在，直接替换 (保持原逻辑)
