@@ -538,6 +538,13 @@ classdef block
             for i = 1:length(block)
                 thisBlock = block{i};
                 sampleTime = get_param(thisBlock.Handle, 'CompiledSampleTime');
+                % 如果Block是子系统, 那么查一下是否存在ActionPort, 如果存在, 那么这个子系统的采样时间是由ActionPort决定的
+                findBlocks = find_system(thisBlock.Handle, 'SearchDepth', 1, 'BlockType', 'ActionPort');
+                if ~isempty(findBlocks)
+                    actionPort = myOp.slx.general.checkBlock(findBlocks(1));
+                    actionPort = actionPort{1};
+                    sampleTime = get_param(actionPort.Handle, 'CompiledSampleTime');
+                end
                 if isequal(sampleTime, [-1, -1])
                     % 有可能是个Chart里面的子块, 一步步寻找父块的采样时间
                     searchBlock = thisBlock;
@@ -563,6 +570,27 @@ classdef block
                         end
                     end
                 end
+                if ~iscell(sampleTime)
+                    sampleTime = {sampleTime};
+                else
+                    newSampleTime = {};
+                    for j = 1:length(sampleTime)
+                        isValid = true;
+                        if isequal(sampleTime{j}, [inf, inf])
+                            isValid = false;
+                        end
+                        if isequal(sampleTime{j}, [inf, 0])
+                            isValid = false;
+                        end
+                        if isValid
+                            newSampleTime{end+1} = sampleTime{j};
+                        end
+                    end
+                    sampleTime = newSampleTime;
+                end
+                % % 排除掉[inf, inf]
+                % sampleTime = cellfun(@(x) x, sampleTime, 'UniformOutput', false);
+                % sampleTime = sampleTime(~cellfun(@(x) isequal(x, [inf, inf]), sampleTime));
                 sampleTimes{i} = sampleTime;
             end
             if nargout == 1
@@ -575,9 +603,12 @@ classdef block
                     thisBlockPath = getfullname(thisBlock.Handle);
                     idx = myhiliteCmd(thisBlockPath, string(i));
                     msg = myhiliteCmd(thisBlockPath, thisBlockPath);
-                    msg = append('🌙 ', msg, ' 的采样时间: ', mat2str(sampleTime));
+                    msg = append('🌙 ', msg, ' 的采样时间: ');
+                    for j = 1:length(sampleTime)
+                        msg = append(msg, newline, mat2str(sampleTime{j}));
+                    end
                     msg = append(idx, '. ', msg);
-                    msgAll = append(msgAll, msg, newline);
+                    disp(msg);
                 end
                 varargout{1} = sampleTimes;
                 varargout{2} = msgAll;
@@ -588,7 +619,10 @@ classdef block
                     thisBlockPath = getfullname(thisBlock.Handle);
                     idx = myhiliteCmd(thisBlockPath, string(i));
                     msg = myhiliteCmd(thisBlockPath, thisBlockPath);
-                    msg = append('🌙 ', msg, ' 的采样时间: ', mat2str(sampleTime));
+                    msg = append('🌙 ', msg, ' 的采样时间: ');
+                    for j = 1:length(sampleTime)
+                        msg = append(msg, newline, mat2str(sampleTime{j}));
+                    end
                     msg = append(idx, '. ', msg);
                     disp(msg);
                 end

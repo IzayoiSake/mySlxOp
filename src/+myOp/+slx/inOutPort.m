@@ -110,8 +110,19 @@ classdef inOutPort
             );
             for i = 1:length(blocks)
                 thisBlock = blocks{i};
+                % 获取连接线的信号名称，并将其作为端口名称
                 if strcmp(thisBlock.BlockType, 'Inport')
                     line = myOp.slx.block.getBlockLine("block", thisBlock, "lineType", "Outport", "lineNum", 1);
+                    if isempty(line)
+                        % 如果没有连接线，则尝试获取其父模块的连接线
+                        parentBlock = thisBlock.Parent;
+                        parentBlock = myOp.slx.general.parseBlock(parentBlock);
+                        portNum = str2double(thisBlock.Port);
+                        line = myOp.slx.block.getBlockLine("block", parentBlock, "lineType", "Inport", "lineNum", portNum);
+                    end
+                    if isempty(line)
+                        continue;
+                    end
                     line = line{1};
                     lineName = myOp.slx.line.getPrpgtSigName("line", line);
                     if isequal(lineName, "")
@@ -120,6 +131,13 @@ classdef inOutPort
                     thisBlock.Name = lineName;
                 elseif strcmp(thisBlock.BlockType, 'Outport')
                     line = myOp.slx.block.getBlockLine("block", thisBlock, "lineType", "Inport", "lineNum", 1);
+                    if isempty(line)
+                        % 如果没有连接线，则尝试获取其父模块的连接线
+                        parentBlock = thisBlock.Parent;
+                        parentBlock = myOp.slx.general.parseBlock(parentBlock);
+                        portNum = str2double(thisBlock.Port);
+                        line = myOp.slx.block.getBlockLine("block", parentBlock, "lineType", "Outport", "lineNum", portNum);
+                    end
                     line = line{1};
                     lineName = myOp.slx.line.getPrpgtSigName("line", line);
                     if isequal(lineName, "")

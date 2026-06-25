@@ -2,10 +2,10 @@ classdef goFrom
 
     methods(Static)
 
-        function goFromflushLineName(opts)
-        % GOFROMFLUSHLINENAME  将 GoTo / From 模块的名字赋值给对应的信号线
+        function flushLineName(opts)
+        % flushLineName  将 GoTo / From 模块的名字赋值给对应的信号线
         %
-        %   goFromflushLineName(OPTIONS) 遍历指定的 Simulink 模块句柄，
+        %   flushLineName(OPTIONS) 遍历指定的 Simulink 模块句柄，
         %   对于 GoTo 模块，将其 GotoTag 名称赋值给输入信号线；
         %   对于 From 模块，将其 GotoTag 名称赋值给输出信号线。
         %
@@ -18,10 +18,10 @@ classdef goFrom
         %
         %   示例：
         %       % 对当前选择的 GoTo / From 模块进行信号线重命名
-        %       goFromflushLineName();
+        %       flushLineName();
         %
         %       % 指定模块路径
-        %       goFromflushLineName(struct('block', 'myModel/Goto1'));
+        %       flushLineName(struct('block', 'myModel/Goto1'));
 
             arguments
                 opts.block = '';
@@ -64,10 +64,10 @@ classdef goFrom
             end
         end
 
-        function goFromLine2BlockTag(opts)
-        % GOFROMLINE2BLOCKTAG  将信号线的名字赋值给对应的 GoTo / From 模块
+        function flushBlockTag(opts)
+        % flushBlockTag  将信号线的名字赋值给对应的 GoTo / From 模块
         %
-        %   goFromLine2BlockTag(OPTIONS) 遍历指定的 Simulink 模块句柄，
+        %   flushBlockTag(OPTIONS) 遍历指定的 Simulink 模块句柄，
         %   对于 GoTo 模块，将其输入信号线的名称赋值给 GotoTag；
         %   对于 From 模块，将其输出信号线的名称赋值给 GotoTag。
         %
@@ -80,10 +80,10 @@ classdef goFrom
         %
         %   示例：
         %       % 对当前选择的 GoTo / From 模块进行信号线 → 模块名的重命名
-        %       goFromLine2BlockTag();
+        %       flushBlockTag();
         %
         %       % 指定模块路径
-        %       goFromLine2BlockTag(struct('block', 'myModel/From1'));
+        %       flushBlockTag(struct('block', 'myModel/From1'));
 
             arguments
                 opts.block = '';

@@ -90,7 +90,7 @@ classdef line
         end
 
 
-        function line_createSelectedSig(opts)
+        function createSelectedSig(opts)
         % 创建选中的信号线的标准信号
             arguments
                 opts.checkDataType = true;
@@ -1137,7 +1137,7 @@ classdef line
                 if ~isempty(traceSrcBlocks)
                     traceSrcBlocks = myOp.slx.general.parseBlock(traceSrcBlocks);
                 end
-                traceAllBlocks = [traceDstBlocks; traceSrcBlocks];
+                traceAllBlocks = [traceSrcBlocks; traceDstBlocks];
 
                 % 开始计算采样时间
                 isOk = false;
@@ -1149,6 +1149,11 @@ classdef line
                 if ~isempty(targetBlock)
                     for j = 1:length(targetBlock)
                         thisTargetBlock = targetBlock{j};
+                        if isequal(thisTargetBlock.BlockType, "S-Function")
+                            continue;
+                        end
+                        % thisSt = myOp.slx.block.getSampleTime("block", thisTargetBlock);
+                        % thisSt = thisSt{1};
                         thisSt = get_param(thisTargetBlock.Handle, 'CompiledSampleTime');
                         if ~isempty(thisSt)
                             if ~iscell(thisSt)
@@ -1241,6 +1246,12 @@ classdef line
                     error(append("❌️ 错误: 无法获取信号线 ", errorMsg, " 的采样时间."));
                 end
             end
+            % % 排除掉[inf, inf]
+            % for i = 1:length(sampleTime)
+            %     thisSampleTime = sampleTime{i};
+            %     thisSampleTime = thisSampleTime(~cellfun(@(x) isequal(x, [Inf, Inf]), thisSampleTime));
+            %     sampleTime{i} = thisSampleTime;
+            % end
             if nargout == 1
                 varargout{1} = sampleTime;
             elseif nargout >= 2
@@ -1254,7 +1265,7 @@ classdef line
 
                     idx = myhiliteCmd(thisLineId, string(i));
                     msg = sprintf('✨ 信号线 %s 的采样时间为: ', myhiliteCmd(thisLineId, thisLinePath));
-
+                    msg = append(msg, newline);
                     if isempty(thisSt)
                         msg = append(msg, "(空)");
                     elseif iscell(thisSt)
@@ -1283,7 +1294,7 @@ classdef line
                     
                     idx = myhiliteCmd(thisLineId, string(i));
                     msg = sprintf('✨ 信号线 %s 的采样时间为: ', myhiliteCmd(thisLineId, thisLinePath));
-
+                    msg = append(msg, newline);
                     if isempty(thisSt)
                         msg = append(msg, "(空)");
                     elseif iscell(thisSt)
@@ -1355,6 +1366,48 @@ classdef line
                         sigStr = strjoin(thisSigList, newline);
                         msg = append(msg, newline, sigStr);
                     end
+                    disp(msg);
+                end
+            end
+        end
+
+
+        function varargout = getResolvedSig(opts)
+
+            arguments
+                opts.line = '';
+                opts.block = '';
+                opts.searchDepth = Inf;
+            end
+
+            line = myOp.slx.line.getAll(...
+                'line', opts.line, ...
+                'block', opts.block, ...
+                'searchDepth', opts.searchDepth ...
+            );
+
+            if isempty(line)
+                return;
+            end
+
+            lineChanged = {};
+            for i = 1:length(line)
+                thisLine = line{i};
+                if thisLine.MustResolveToSignalObject
+                    lineChanged{end+1} = thisLine;
+                end
+            end
+            if nargout == 1
+                varargout{1} = lineChanged;
+            else
+                for i = 1:length(lineChanged)
+                    thisLine = lineChanged{i};
+                    thisLineId = myOp.slx.line.getId("line", thisLine);
+                    thisLineId = thisLineId{1};
+                    thisLineName = myOp.slx.line.getPrpgtSigName("line", thisLine);
+                    msg = myhiliteCmd(thisLineId, thisLineName);
+                    num = myhiliteCmd(thisLineId, string(i));
+                    msg = append(num, '. ✨ 信号线 ', msg, ' 的 MustResolveToSignalObject 属性为 true. ');
                     disp(msg);
                 end
             end
